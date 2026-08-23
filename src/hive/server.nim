@@ -319,14 +319,24 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## player pods down as soon as results.json exists), then the replay,
       ## then the results.
       let done = %*{"done": true, "result": results}
-      let doneDeadline = epochTime() + DoneBroadcastSeconds
+      ## A 3.0 s deadline PER SEAT, not one 3.0 s allowance shared across all
+      ## four: a slow socket must not eat the budget of the seats behind it
+      ## and leave them without their result frame. The whole broadcast is
+      ## still hard-bounded, at seats x DoneBroadcastSeconds.
+      let broadcastDeadline =
+        epochTime() + DoneBroadcastSeconds * float(Colonies)
       for slot, socket in game.playerSockets:
-        if epochTime() > doneDeadline:
+        if epochTime() > broadcastDeadline:
+          echo "hive: done broadcast out of budget before slot ", slot
           break
+        let seatDeadline = epochTime() + DoneBroadcastSeconds
         try:
           socket.send($done)
         except CatchableError:
           discard
+        if epochTime() > seatDeadline:
+          echo "hive: done broadcast to slot ", slot, " took longer than its ",
+            DoneBroadcastSeconds, "s deadline"
       broadcastGlobalLocked()
 
     echo "hive: episode ", $game.match.reason, "/", $game.match.rule,
