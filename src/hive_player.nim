@@ -8,29 +8,32 @@
 ##
 ## PLAYER_SCRIPTED=marcher (or 1/true/yes) registers the seat as the built-in
 ## marcher baseline instead; PLAYER_SCRIPTED=driftling as the weaker drifting
-## baseline. The server plays those deterministically, no LLM.
+## baseline. The server plays those deterministically, no LLM. A seat that
+## sets NEITHER registers as `marcher`: no prompt is invented here.
 ##
 ## To field your own policy, reuse this image and set PLAYER_PROMPT:
 ##   coworld upload-policy <hive-image> --name my-hive \
 ##     --run /bin/hive-player --secret-env PLAYER_PROMPT="<your strategy>"
 
-import std/[json, options, os, strutils]
+import std/[json, options, os, strutils, times]
 import whisky
 
-const DefaultPrompt = """
-Open wide, then commit. For the first two turns run scouts near 60 with
-trail_gain under 30: you have no road yet and a strong road to nowhere is
-worse than no road. The moment a cache shows up in your sources list, invert
-- scouts 12, trail_gain 85, lay_food 90, focus that block with focus_weight
-80 - and then leave the doctrine alone while delivered_last_turn keeps
-climbing. Keep lay_home at 55 or above whenever your ants are working more
-than 25 cells out, because past 12 cells the home trail is the only way back.
-Poach at 15 as a standing habit. When deliveries collapse by a third in one
-turn the cache is gone: recall for exactly one turn, then relaunch with
-scouts 50 and focus null.
-"""
+const
+  ConnectAttempts = 4
 
-const ConnectAttempts = 4
+  DefaultScripted = "marcher"
+    ## "A seat that sets neither defaults to PLAYER_SCRIPTED=marcher." No
+    ## prompt is invented here: a seat nobody configured must not silently
+    ## become an LLM seat playing a strategy its owner never wrote.
+
+  ReceivePollMs = 5000
+    ## The receive loop polls rather than blocking forever, so a game pod
+    ## that dies without closing the socket cannot wedge this one.
+
+  LifetimeSeconds = 1500.0
+    ## Backstop: longer than the platform's 1200 s episode timeout, so it
+    ## never cuts a live episode short, and short enough that a player pod
+    ## always exits on its own.
 
 when isMainModule:
   let url = getEnv("COWORLD_PLAYER_WS_URL")
@@ -38,10 +41,12 @@ when isMainModule:
     stderr.writeLine("hive player: COWORLD_PLAYER_WS_URL is not set")
     quit(1)
 
-  var prompt = getEnv("PLAYER_PROMPT")
-  let scripted = getEnv("PLAYER_SCRIPTED").strip()
+  let prompt = getEnv("PLAYER_PROMPT")
+  var scripted = getEnv("PLAYER_SCRIPTED").strip()
   if prompt.len == 0 and scripted.len == 0:
-    prompt = DefaultPrompt
+    scripted = DefaultScripted
+    echo "hive player: neither PLAYER_PROMPT nor PLAYER_SCRIPTED is set; ",
+      "registering as the ", DefaultScripted, " baseline"
   let policy = getEnv("PLAYER_POLICY_LABEL")
 
   proc registerFrame(): string =
@@ -71,15 +76,20 @@ when isMainModule:
   echo "hive player: registered (", prompt.len, " prompt chars",
     (if scripted.len > 0: ", scripted " & scripted else: ""), ")"
 
-  while true:
+  ## A BOUNDED receive loop. `receiveMessage(timeout)` returns none when the
+  ## poll expires without a frame arriving - that is not a close, so the loop
+  ## re-checks its own lifetime deadline and waits again. A game pod that
+  ## dies without closing the socket therefore costs this pod a bounded wait,
+  ## not the platform's kill timer.
+  let lifetime = epochTime() + LifetimeSeconds
+  while epochTime() < lifetime:
     let received =
-      try: socket.receiveMessage()
+      try: socket.receiveMessage(ReceivePollMs)
       except CatchableError as error:
         echo "hive player: receive failed: ", error.msg
         break
     if received.isNone:
-      echo "hive player: connection closed, exiting"
-      break
+      continue
     let message = received.get()
     if message.kind != TextMessage:
       continue

@@ -76,6 +76,34 @@ proc main() =
     check("COWORLD_PLAYER_WS_URL" in run.output, "and says so")
     report("the player reports a missing COWORLD_PLAYER_WS_URL")
 
+  block playerDefaultsToTheMarcher:
+    ## "A seat that sets neither defaults to PLAYER_SCRIPTED=marcher." An
+    ## unconfigured seat must never become an LLM seat playing a strategy its
+    ## owner never wrote, so no default prompt may be compiled in at all.
+    let source = readRepoFile("src/hive_player.nim")
+    check("DefaultPrompt" notin source,
+      "the player carries no invented default prompt")
+    let run = execCmdEx(quoteShell(player),
+      env = {"PATH": getEnv("PATH"),
+             "COWORLD_PLAYER_WS_URL":
+               "ws://127.0.0.1:9/player?slot=0&token=t"}.newStringTable)
+    check("marcher baseline" in run.output,
+      "an unconfigured seat announces it is registering as the marcher")
+    checkEqual(run.exitCode, 0, "and it still exits 0 on an unreachable game")
+    report("a seat that sets neither env var registers as the marcher")
+
+  block playerReceiveLoopIsBounded:
+    ## Checklist item 5: no unbounded loop, no blocking read. The receive
+    ## loop polls with a deadline instead of blocking forever, so a game pod
+    ## that dies WITHOUT closing the socket cannot wedge the player pod.
+    let source = readRepoFile("src/hive_player.nim")
+    check("while true" notin source, "no unbounded loop in the player")
+    check("receiveMessage(ReceivePollMs)" in source,
+      "the receive is a bounded poll, not a blocking read")
+    check("epochTime() < lifetime" in source,
+      "and the loop as a whole has a lifetime deadline")
+    report("the player's receive loop is bounded")
+
   block playerUnreachable:
     ## The bounded connect retry: an unreachable game must not hang the pod.
     let started = epochTime()
