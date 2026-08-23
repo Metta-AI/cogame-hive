@@ -95,12 +95,26 @@ proc main() =
     report("bullwhip's coworld-replay bridge is present, ready included")
 
   block loadedAttributes:
-    check("data-replay-loaded" in page or "data-replay-loaded" in shell,
-      "the data-replay-loaded attribute survives")
+    ## Acceptance checklist item 13: BOTH markers are set on <html>, from the
+    ## shell's own code path, and `data-replay-loaded` carries the literal
+    ## string "true" on the first DRAWN frame — tools/ci/viewer_smoke.mjs
+    ## matches on `loaded_attr === "true"`, so '1' would never be seen.
+    check("data-replay-loaded" in shell,
+      "the shell itself sets data-replay-loaded")
+    check("setAttribute(\"data-replay-loaded\", \"true\")" in shell,
+      "…to the string \"true\", not '1'")
+    let loadedAt = shell.find("setAttribute(\"data-replay-loaded\"")
+    let readyAt = shell.find("tell(\"ready\")")
+    let rafAt = shell.rfind("requestAnimationFrame", 0, loadedAt)
+    check(rafAt >= 0 and readyAt > loadedAt,
+      "…inside the double requestAnimationFrame that follows the first paint")
+    check("setAttribute('data-replay-loaded'" notin page,
+      "the chrome page no longer sets it before the first frame is drawn")
     check("data-replay-mismatch-tick" in page,
       "the data-replay-mismatch-tick attribute survives")
-    check("data-replay-error" in shell, "the failure attribute survives")
-    report("the inherited replay status attributes survive")
+    check("setAttribute(\"data-replay-error\"" in shell,
+      "the failure attribute is set by the shell too")
+    report("the replay status attributes are both set from the shell")
 
   block browserSmokeIsWired:
     ## The only gate that EXECUTES the assembled page. A wasm-viewer job that

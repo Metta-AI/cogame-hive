@@ -153,10 +153,17 @@
       rock: api.rock(),
       assetBase: "./art"
     })).then(function () {
-      // Report ready one frame after the first drawn frame, so "ready" means
-      // a picture and not merely a parsed payload.
+      // The first drawn frame, and only then. `attach` returns once it has
+      // asked for frame 0; a double requestAnimationFrame lands after that
+      // paint has actually completed. Both markers are set here, from the
+      // shell's own code path: `data-replay-loaded="true"` is what the
+      // platform's viewer smoke (tools/ci/viewer_smoke.mjs) probes for, and
+      // the string is "true" — not "1" — because the probe matches on it.
       window.requestAnimationFrame(function () {
-        window.requestAnimationFrame(function () { tell("ready"); });
+        window.requestAnimationFrame(function () {
+          document.documentElement.setAttribute("data-replay-loaded", "true");
+          tell("ready");
+        });
       });
     }).catch(function (error) {
       fail(String((error && error.message) || error));

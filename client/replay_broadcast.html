@@ -2279,11 +2279,13 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
           replay.names.colours);
         $('lockerroom').classList.add('gone');
         $('status').textContent = '';
-        document.documentElement.setAttribute('data-replay-loaded', '1');
         relayout();
         seek(0);
         state.pl = true;
         window.requestAnimationFrame(tickLoop);
+        // `data-replay-loaded` is NOT set here: attach() has only just asked
+        // for the first frame. The shell (replay-viewer/static_replay.js)
+        // sets it once that frame has actually been painted.
       });
     },
     fail: showFailure
