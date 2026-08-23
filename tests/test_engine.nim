@@ -214,6 +214,7 @@ proc main() =
     delEnv("AWS_BEARER_TOKEN_BEDROCK")
     check(not client.disabled, "a bedrock client starts enabled")
     client.sendBatch = fakeForbidden
+    records.setLen(0)
     var match = newSim(testConfig(240, 5), meadow)
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
