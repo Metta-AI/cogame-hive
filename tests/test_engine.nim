@@ -60,6 +60,19 @@ proc fakeGarbage(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
         "content": [{"type": "text", "text": "I would rather not."}]}),
         error: ""))
 
+proc fakeIgnoresItsDeadline(batch: RequestBatch, timeoutSeconds: int):
+    ResponseBatch {.gcsafe.} =
+  ## A transport that does NOT honour the deadline it was handed. That is
+  ## exactly what the OUTER per-turn deadline exists for: the two attempt
+  ## budgets are only as good as the transport that is given them.
+  {.gcsafe.}:
+    records.add(BatchRecord(size: batch.len, opened: epochTime(),
+      closed: epochTime()))
+    sleep(1200)
+    for index in 0 ..< batch.len:
+      result.add((response: Response(code: 0),
+        error: "Operation timed out after " & $timeoutSeconds & " seconds"))
+
 proc enabledClient(): LlmClient =
   result = newLlmClient()
   result.disabled = false
@@ -144,6 +157,37 @@ proc main() =
       checkEqual(outcomes[seat].cause, "timeout", "the cause is timeout")
       checkEqual($outcomes[seat].resolved.source, "fallback", "it fell back")
     report("a hung client is bounded by the two attempt deadlines")
+
+  block outerPerTurnDeadline:
+    ## "one outer per-turn deadline of 22.0 s". The two attempt deadlines
+    ## bound the turn at 14 + 6 only while the transport honours them; the
+    ## outer deadline holds even when it does not.
+    checkEqual(DefaultTurnBudgetSeconds, 22.0, "the default outer budget")
+    checkEqual(newLlmClient().turnBudgetSeconds, DefaultTurnBudgetSeconds,
+      "a client carries it unless the server overrides it")
+    records.setLen(0)
+    let client = enabledClient()
+    client.turnBudgetSeconds = 1.0
+    check(client.turnBudgetSeconds < FirstAttemptSeconds.float,
+      "the fixture's outer budget really is tighter than the first attempt")
+    client.sendBatch = fakeIgnoresItsDeadline
+    var match = newSim(testConfig(240, 5), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    let started = epochTime()
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let elapsed = epochTime() - started
+    checkEqual(records.len, 1,
+      "the retry is never started once the outer deadline is spent")
+    check(elapsed < 3.0,
+      "the turn returns inside its own budget (took " & $elapsed & "s)")
+    for seat in 0 ..< Colonies:
+      checkEqual($outcomes[seat].resolved.source, "fallback",
+        "every seat lands on the scripted fallback")
+      checkEqual(outcomes[seat].cause, "timeout", "with cause timeout")
+      check(outcomes[seat].resolved.doctrine.isLegal(),
+        "and the fallback doctrine is legal")
+    report("an outer per-turn deadline bounds the turn on its own")
 
   block budgetGuardSettlesEarly:
     ## Once the guard engages the whole remaining match runs on the scripted

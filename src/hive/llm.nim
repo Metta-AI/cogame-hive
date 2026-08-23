@@ -28,6 +28,11 @@ const
   BedrockAnthropicVersion = "bedrock-2023-05-31"
   FirstAttemptSeconds* = 14
   RetryAttemptSeconds* = 6
+  DefaultTurnBudgetSeconds* = 22.0
+    ## The OUTER per-turn deadline. The two attempt deadlines already bound
+    ## the turn at 14 + 6 = 20 s, but that arithmetic assumes the transport
+    ## honours its own timeout; this is the belt-and-braces bound the design
+    ## note names, and it also covers request assembly.
 
   SystemPrompt* = """
 You are the whole mind of one ant colony on a 160x88 cell meadow shared with three
@@ -80,6 +85,9 @@ type
     bedrockToken: string
     model*: string
     maxOutputTokens*: int
+    turnBudgetSeconds*: float
+      ## The outer per-turn deadline; the server sets it from the game
+      ## config's turnBudgetSeconds.
     disabled*: bool
     sendBatch*: proc (batch: RequestBatch, timeoutSeconds: int): ResponseBatch
       {.gcsafe.}
@@ -134,8 +142,10 @@ proc bedrockUrl(client: LlmClient): string =
   client.bedrockEndpoint & "/model/" &
     client.bedrockModels[client.bedrockModel] & "/invoke"
 
-proc newLlmClient*(model = "claude-sonnet-5", maxOutputTokens = 900): LlmClient =
-  result = LlmClient(model: model, maxOutputTokens: maxOutputTokens)
+proc newLlmClient*(model = "claude-sonnet-5", maxOutputTokens = 900,
+    turnBudgetSeconds = DefaultTurnBudgetSeconds): LlmClient =
+  result = LlmClient(model: model, maxOutputTokens: maxOutputTokens,
+    turnBudgetSeconds: turnBudgetSeconds)
   let client = result
   result.sendBatch = proc (batch: RequestBatch, timeoutSeconds: int):
       ResponseBatch {.gcsafe.} =
@@ -278,10 +288,21 @@ proc decideAll*(
     else:
       open.add(seat)
 
+  ## The OUTER per-turn deadline. Every attempt is clamped to what is left of
+  ## it, and once it is spent the remaining seats drop straight to the
+  ## scripted layer instead of starting an attempt that cannot finish in time.
+  let turnDeadline = epochTime() + max(1.0, client.turnBudgetSeconds)
+  var outerExpired = false
   for attempt in 0 .. 1:
     if open.len == 0 or client.disabled:
       break
-    let deadline = if attempt == 0: FirstAttemptSeconds else: RetryAttemptSeconds
+    let remaining = turnDeadline - epochTime()
+    if remaining <= 0.0:
+      outerExpired = true
+      break
+    let attemptBudget =
+      if attempt == 0: FirstAttemptSeconds else: RetryAttemptSeconds
+    let deadline = max(1, min(attemptBudget, int(remaining)))
     var batch: RequestBatch
     for seat in open:
       var user = userMessage(match, seat, prompts[seat])
@@ -320,8 +341,18 @@ proc decideAll*(
     open = stillOpen
 
   for seat in open:
-    ## Two consecutive failures: the marcher doctrine, computed in
-    ## microseconds, plus the `fallback` event the caller writes.
+    ## Two consecutive failures, or the outer per-turn deadline: the marcher
+    ## doctrine, computed in microseconds, plus the `fallback` event the
+    ## caller writes.
+    if outerExpired:
+      echo "hive llm: seat ", seat, " out of per-turn budget (",
+        client.turnBudgetSeconds, "s)"
+      if result[seat].cause.len == 0:
+        result[seat].cause = "timeout"
+        result[seat].detail = truncateRunes(
+          "per-turn deadline of " & $client.turnBudgetSeconds &
+          "s expired before this seat could be asked", MaxDetailRunes)
+        result[seat].attempts = max(1, result[seat].attempts)
     echo "hive llm: seat ", seat, " falling back to the scripted doctrine"
     result[seat].resolved = scriptedResolved(views[seat], skMarcher, turn,
       memory[seat], dsFallback)

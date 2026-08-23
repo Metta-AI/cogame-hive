@@ -218,7 +218,8 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## reported for the lowest offending slot only.
       declarePlayerFailure(missing[0], "player never connected")
 
-    let client = newLlmClient()
+    let client = newLlmClient(
+      turnBudgetSeconds = gameConfig.turnBudgetSeconds)
     var memory: array[Colonies, BaselineMemory]
     var turnsLlm: array[Colonies, int]
     var fallbackTurns: array[Colonies, int]
