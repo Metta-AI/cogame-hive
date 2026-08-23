@@ -73,6 +73,19 @@ proc fakeIgnoresItsDeadline(batch: RequestBatch, timeoutSeconds: int):
       result.add((response: Response(code: 0),
         error: "Operation timed out after " & $timeoutSeconds & " seconds"))
 
+proc fakeForbidden(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
+    {.gcsafe.} =
+  ## A Bedrock 403 whose body does NOT contain the literal string
+  ## "Model access is denied" - the wording varies by account and by profile,
+  ## and the note's rule is about the status code, not the prose.
+  {.gcsafe.}:
+    records.add(BatchRecord(size: batch.len, opened: epochTime(),
+      closed: epochTime()))
+    for index in 0 ..< batch.len:
+      result.add((response: Response(code: 403, body:
+        "{\"message\":\"You don't have access to the model with the " &
+        "specified model ID.\"}"), error: ""))
+
 proc enabledClient(): LlmClient =
   result = newLlmClient()
   result.disabled = false
@@ -188,6 +201,35 @@ proc main() =
       check(outcomes[seat].resolved.doctrine.isLegal(),
         "and the fallback doctrine is legal")
     report("an outer per-turn deadline bounds the turn on its own")
+
+  block bedrockLadderAdvancesOn403:
+    ## "on a 403 the client advances to the next candidate". Three candidates
+    ## are shipped, so two decideAll calls (two attempts each) walk the whole
+    ## ladder; only when the last one has answered 403 is the client disabled.
+    putEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://127.0.0.1:9/bedrock")
+    putEnv("AWS_BEARER_TOKEN_BEDROCK", "test-token")
+    delEnv("BEDROCK_MODEL")
+    let client = newLlmClient()
+    delEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME")
+    delEnv("AWS_BEARER_TOKEN_BEDROCK")
+    check(not client.disabled, "a bedrock client starts enabled")
+    client.sendBatch = fakeForbidden
+    var match = newSim(testConfig(240, 5), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    let first = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    check(not client.disabled,
+      "a 403 walks the bedrock ladder instead of writing the client off")
+    for seat in 0 ..< Colonies:
+      checkEqual($first[seat].resolved.source, "fallback",
+        "the turn still falls back so no colony is unactuated")
+    let second = client.decideAll(match, promptsAll("go"), scripted, memory, 1)
+    check(client.disabled,
+      "only when the LAST candidate 403s is the client disabled")
+    for seat in 0 ..< Colonies:
+      check(second[seat].resolved.doctrine.isLegal(),
+        "and every seat still gets a legal doctrine")
+    report("a 403 advances the bedrock candidate, whatever the body says")
 
   block budgetGuardSettlesEarly:
     ## Once the guard engages the whole remaining match runs on the scripted

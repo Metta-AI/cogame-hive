@@ -219,9 +219,14 @@ proc textOf(
     raise newException(HiveError, "llm transport: " & error)
   if response.code == 401 or response.code == 403:
     let detail = response.body[0 .. min(response.body.high, 400)]
-    if "Model access is denied" in response.body and
-        client.tryNextBedrockModel("no model access"):
-      raise newException(HiveError, "bedrock model access denied: " & detail)
+    ## "on a 403 the client advances to the next candidate". A 403 on Bedrock
+    ## is a per-MODEL verdict - no access to this inference profile, or the
+    ## profile is not enabled in this account - so the ladder is walked before
+    ## the whole client is written off, whatever wording the body carries.
+    ## Only when the last candidate has answered 403 is the client disabled.
+    if client.tryNextBedrockModel("http " & $response.code):
+      raise newException(HiveError,
+        "bedrock model rejected (" & $response.code & "): " & detail)
     client.disabled = true
     raise newException(HiveError,
       "llm auth failed (" & $response.code & ") at " & url & ": " & detail)
