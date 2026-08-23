@@ -146,5 +146,41 @@ proc main() =
     report("marcher beats driftling at seed 42: " & $marcher & " vs " &
       $driftling)
 
+  block gridHarnessIsCommitted:
+    ## Acceptance checklist item 7: the baseline's parameters were tuned with
+    ## a grid harness, not guessed. The harness is tools/tune_marcher.nim and
+    ## ci.yml's `test` job runs it in release on every push; this asserts it
+    ## exists, that it sweeps the shipped configuration rather than a copy of
+    ## it, and that it is actually wired into CI.
+    let harness = readRepoFile("tools/tune_marcher.nim")
+    check("ShippedMarcher" in harness,
+      "the harness sweeps the SHIPPED parameters, not a private copy")
+    check("scriptedResolved" in harness,
+      "and it drives the real baseline code path")
+    let workflow = readRepoFile(".github/workflows/ci.yml")
+    check("tools/tune_marcher.nim" in workflow,
+      "ci.yml runs the grid harness")
+    ## The shipped pump doctrine is exactly ShippedMarcher, so the grid the
+    ## harness sweeps is the grid these numbers came out of.
+    var memory = BaselineMemory()
+    let view = %*{
+      "turn": 5,
+      "you": {"nest_block": [2, 1], "delivered": 40,
+              "delivered_last_turn": 9, "last_doctrine": newJNull()},
+      "sources": [{"id": 0, "block": [9, 5], "cell": [76, 43],
+                   "amount_seen": 40, "seen_turn": 3,
+                   "near_nest": newJNull()}]
+    }
+    let pump = scriptedDoctrine(view, skMarcher, 5, memory)
+    checkEqual(pump.scouts, ShippedMarcher.scouts, "pump scouts")
+    checkEqual(pump.trailGain, ShippedMarcher.trailGain, "pump trail_gain")
+    checkEqual(pump.poach, ShippedMarcher.poach, "pump poach")
+    checkEqual(pump.spread, ShippedMarcher.spread, "pump spread")
+    checkEqual(pump.layFood, ShippedMarcher.layFood, "pump lay_food")
+    checkEqual(pump.layHome, ShippedMarcher.layHome, "pump lay_home")
+    checkEqual(pump.focusWeight, ShippedMarcher.focusWeight,
+      "pump focus_weight")
+    report("the marcher's pump doctrine is the grid harness's ShippedMarcher")
+
 main()
 echo "test_baselines: all checks passed"

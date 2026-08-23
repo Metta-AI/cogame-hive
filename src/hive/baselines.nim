@@ -20,6 +20,24 @@ type
     zeroStreak*: int
     recalledLast*: bool
 
+  MarcherParams* = object
+    ## The marcher's PUMP doctrine - the one it plays once it can see a cache
+    ## worth working, and the only part of the baseline whose numbers are a
+    ## choice rather than a rule. `tools/tune_marcher.nim` sweeps this grid
+    ## over several seeds and asserts the shipped values are at or near the
+    ## top of it, which is the evidence behind them.
+    scouts*: int
+    trailGain*: int
+    poach*: int
+    spread*: int
+    layFood*: int
+    layHome*: int
+    focusWeight*: int
+
+const ShippedMarcher* = MarcherParams(
+  scouts: 15, trailGain: 78, poach: 12, spread: 32,
+  layFood: 88, layHome: 52, focusWeight: 70)
+
 proc parseScriptKind*(text: string): ScriptKind =
   ## PLAYER_SCRIPTED values, bullwhip's shape: "1"/"true"/"yes"/"marcher"
   ## play the marcher, "driftling" the driftling, anything else nothing.
@@ -36,10 +54,12 @@ proc marcherOpening(): Doctrine =
     layHome: 55, recall: false, hasFocus: false, focusWeight: 0,
     note: "marcher: opening", say: "")
 
-proc marcherPump(bx, by: int): Doctrine =
-  Doctrine(scouts: 15, trailGain: 78, poach: 12, spread: 32, layFood: 88,
-    layHome: 52, recall: false, hasFocus: true, focusBx: bx, focusBy: by,
-    focusWeight: 70, note: "marcher: pump", say: "")
+proc marcherPump(bx, by: int, params: MarcherParams): Doctrine =
+  Doctrine(scouts: params.scouts, trailGain: params.trailGain,
+    poach: params.poach, spread: params.spread, layFood: params.layFood,
+    layHome: params.layHome, recall: false, hasFocus: true, focusBx: bx,
+    focusBy: by, focusWeight: params.focusWeight, note: "marcher: pump",
+    say: "")
 
 proc marcherProbe(bx, by: int): Doctrine =
   Doctrine(scouts: 60, trailGain: 25, poach: 25, spread: 65, layFood: 55,
@@ -64,7 +84,8 @@ proc scriptedDoctrine*(
   view: JsonNode,
   kind: ScriptKind,
   turn: int,
-  memory: var BaselineMemory
+  memory: var BaselineMemory,
+  params = ShippedMarcher
 ): Doctrine =
   ## One doctrine for one seat, from that seat's view only.
   if kind == skDriftling:
@@ -128,7 +149,7 @@ proc scriptedDoctrine*(
 
   if bestBx >= 0:
     marcherPump(min(BlockCols - 1, max(0, bestBx)),
-      min(BlockRows - 1, max(0, bestBy)))
+      min(BlockRows - 1, max(0, bestBy)), params)
   else:
     let target = towardCentre(nbx, nby)
     marcherProbe(target.bx, target.by)
@@ -138,10 +159,11 @@ proc scriptedResolved*(
   kind: ScriptKind,
   turn: int,
   memory: var BaselineMemory,
-  source = dsScripted
+  source = dsScripted,
+  params = ShippedMarcher
 ): ResolvedDoctrine =
   ResolvedDoctrine(
-    doctrine: scriptedDoctrine(view, kind, turn, memory),
+    doctrine: scriptedDoctrine(view, kind, turn, memory, params),
     source: source,
     latencyMs: 0
   )
