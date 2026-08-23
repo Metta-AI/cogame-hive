@@ -13,8 +13,7 @@ import support/helpers
 const InheritedChromeIds = [
   "viewport", "stage", "board", "lightpool", "grain", "chrome", "scorebug",
   "plates-l", "plates-r", "clock", "clock-time", "clock-caption", "ffwd-mini",
-  "viewpanel", "minimap", "minimap-canvas", "zoombar", "zoom-out",
-  "zoom-slider", "zoom-in", "zoom-read", "mmwarn", "bannerlane", "killfeed",
+  "mmwarn", "bannerlane", "killfeed",
   "transport", "btn-restart", "btn-back", "btn-play", "btn-fwd", "btn-end",
   "btn-loop", "btn-skip", "btn-spoilers", "ffwd-chip", "win-chip",
   "tick-clock", "speedchips", "scrub", "momentum", "scrub-fill", "lulls",
@@ -49,6 +48,23 @@ proc main() =
     check("--hudscale" in page, "the --hudscale relayout variable survives")
     check("--topband" in page, "--topband survives")
     check("--band" in page, "--band survives")
+    for id in ["viewpanel", "minimap", "minimap-canvas", "zoombar", "zoom-out",
+               "zoom-slider", "zoom-in", "zoom-read"]:
+      check("id=\"" & id & "\"" notin page,
+        "the zoom/minimap #" & id & " is dropped: the meadow fits the frame")
+    ## A seek back into the match dismisses the endcard, which never covers
+    ## the transport band.
+    check("else $('endcard').classList.remove('on');" in page,
+      "seek() takes the endcard down")
+    check("bottom: var(--band, 0px);" in page,
+      "the endcard stops above the transport band")
+    ## Scrubber beats are labelled buttons that seek on click.
+    check("seek: function (tick)" in page, "the page hands chrome_common a seek")
+    check("C.markBeat(e.t, 'war'" in page and "C.markBeat(e.t, 'raid'" in page,
+      "wars and raids are marked with labels")
+    let common = readRepoFile("client/chrome_common.js")
+    check("document.createElement('button')" in common and "ctx.seek(m.tick)" in common,
+      "beat markers are buttons that seek")
     check("classList.toggle('tiny', boardW <= 620)" in page,
       "the .tiny breakpoint at 620px survives")
     check("Math.max(0.5, Math.min(1.6, boardW / 760))" in page,
@@ -75,7 +91,7 @@ proc main() =
     check(mediaStart >= 0, "a @media (max-width: 640px) block is present")
     let media = page[mediaStart ..< min(page.len, mediaStart + 900)]
     check("#doctrinebar" in media, "the doctrine bar is hidden under 640px")
-    check("#viewpanel" in media, "the minimap and zoom bar are hidden too")
+    check("#viewpanel" notin page, "the zoom bar and minimap are gone, not hidden")
     check("lives-label" in media, "the plate labels are hidden")
     check("clamp(11px, 3.4vw, 17px)" in page, "banner text is clamped")
     report("the 360 px legibility rules are in the CSS")

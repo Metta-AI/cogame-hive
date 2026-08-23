@@ -702,135 +702,6 @@ html, body {
   image-rendering: pixelated;
 }
 
-/* ---------- 4b. VIEW CONTROLS (zoom + minimap) ----------
-   One group, top-right, under the reserved scorebug band: the minimap sits
-   directly over the control that summoned it, so "where am I" and "how far in
-   am I" read as a single instrument instead of two scattered widgets.
-   The board is NOT scroll-zoomed — a trackpad two-finger scroll belongs to the
-   page — so these controls are the primary way in, not a fallback, and they are
-   always present. The minimap only appears once there is something off-screen
-   to locate (zoom > 1); at fit it would just be the board again, smaller. */
-#viewpanel {
-  position: absolute;
-  top: calc(var(--topband, 0px) + 10 * var(--u));
-  right: calc(12 * var(--u));
-  z-index: 11;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: calc(5 * var(--u));
-  font-family: var(--pixfont);
-  /* Minimap and zoom bar share ONE width so the pair reads as a single stacked
-     instrument rather than two overlays that happen to be near each other.
-     The px floor is a TOUCH floor: chrome otherwise scales with the embed, and
-     a 300px-wide Observatory card would shrink the buttons below a fingertip. */
-  --viewpanel-w: max(calc(178 * var(--u)), 132px);
-}
-
-/* Board minimap. Aspect + display come from the STREAMED board's real w/h
-   (syncMinimapShape), because a four-team board is square and a fixed 1.874:1
-   inset would squash it. See-through so it reads as an overlay on play. */
-#minimap {
-  position: relative;
-  width: var(--viewpanel-w);
-  aspect-ratio: 1235 / 659;
-  background: rgba(8, 5, 3, 0.5);
-  box-shadow: 0 0 0 1px rgba(232, 163, 61, 0.3);
-  overflow: hidden;
-  cursor: crosshair;
-  display: none;
-}
-#minimap.on { display: block; }
-#minimap canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-/* The label rides INSIDE the frame rather than adding a header row above it —
-   one element, not two stacked boxes. */
-#minimap .mm-cap {
-  position: absolute;
-  left: calc(4 * var(--u));
-  bottom: calc(2 * var(--u));
-  font-size: calc(7 * var(--u));
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--paper-dim);
-  text-shadow: 0 1px 2px rgba(8, 5, 3, 0.9);
-  pointer-events: none;
-}
-
-#zoombar {
-  display: flex;
-  align-items: center;
-  gap: calc(5 * var(--u));
-  width: var(--viewpanel-w);
-  padding: calc(3 * var(--u)) calc(5 * var(--u));
-  /* Opaque enough that the buttons keep their contrast over pale concrete —
-     a control you have to hunt for on a bright floor is not a control. */
-  background: rgba(12, 9, 6, 0.82);
-  box-shadow: 0 0 0 1px rgba(232, 163, 61, 0.22);
-}
-.zbtn {
-  font-family: var(--pixfont);
-  font-size: calc(14 * var(--u));
-  line-height: 1;
-  color: var(--paper);
-  background: rgba(242, 232, 216, 0.08);
-  border: none;
-  flex: none;
-  width: max(calc(20 * var(--u)), 22px);
-  height: max(calc(18 * var(--u)), 20px);
-  cursor: pointer;
-  padding: 0;
-}
-.zbtn:hover { background: rgba(242, 232, 216, 0.22); }
-.zbtn:disabled { opacity: 0.3; cursor: default; background: rgba(242, 232, 216, 0.05); }
-/* Zoom is geometric (1x..12x); the slider's travel is the LOG of it, so equal
-   thumb movement is equal perceived zoom rather than a dead left half. */
-#zoom-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  margin: 0;
-  height: calc(2 * var(--u));
-  background: rgba(242, 232, 216, 0.22);
-  cursor: pointer;
-}
-#zoom-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: calc(9 * var(--u));
-  height: calc(13 * var(--u));
-  background: var(--amber);
-  cursor: grab;
-}
-#zoom-slider::-moz-range-thumb {
-  width: calc(9 * var(--u));
-  height: calc(13 * var(--u));
-  border: none;
-  border-radius: 0;
-  background: var(--amber);
-  cursor: grab;
-}
-#zoom-slider:focus-visible { outline: 1px solid var(--amber); outline-offset: calc(3 * var(--u)); }
-/* Never a bare number: the readout carries its unit, and "FIT" names the state
-   the board opens in instead of showing a meaningless 1.0x. */
-#zoom-read {
-  font-size: max(calc(9 * var(--u)), 9px);
-  letter-spacing: 0.06em;
-  color: var(--paper-dim);
-  flex: none;
-  width: max(calc(26 * var(--u)), 26px);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-#zoom-read.zoomed { color: var(--amber); }
-
 /* ---------- 5. TRANSPORT ---------- */
 #transport {
   position: absolute;
@@ -932,6 +803,23 @@ html, body {
 }
 .beat-marker.return { background: var(--tc, var(--paper-dim)); opacity: 0.45; }
 .beat-marker.capture { background: var(--tc, var(--amber)); width: calc(3 * var(--u)); height: calc(12 * var(--u)); }
+/* hive beats: cache spawns (amber), the centre bonanza (tall amber), trail
+   wars and raids in the starting colony's tint. Markers are buttons (they
+   seek on click), so reset the button chrome and give the 2 px tick a
+   fingertip-sized hit box plus a head so it reads at 360 px. */
+.beat-marker { margin: 0; padding: 0; border: 0; cursor: pointer; pointer-events: auto; font: inherit; }
+.beat-marker::before { content: ''; position: absolute; inset: calc(-3 * var(--u)) calc(-5 * var(--u)); }
+.beat-marker::after {
+  content: ''; position: absolute; left: 50%; top: 0;
+  width: calc(6 * var(--u)); height: calc(6 * var(--u));
+  transform: translate(-50%, calc(-3 * var(--u)));
+  border-radius: 50%; background: inherit;
+}
+.beat-marker:hover, .beat-marker:focus-visible { filter: brightness(1.4); outline: none; z-index: 5; }
+.beat-marker.spawn { background: #e8d07a; height: calc(8 * var(--u)); }
+.beat-marker.bonanza { background: #f2c14e; width: calc(3 * var(--u)); height: calc(12 * var(--u)); }
+.beat-marker.war { background: var(--tc, #fdf6e3); height: calc(10 * var(--u)); }
+.beat-marker.raid { background: var(--tc, var(--paper-dim)); height: calc(7 * var(--u)); }
 /* winner cap: a flat block just past the track's right end, colored by the
    verdict (split for a draw), so the scrubber itself says how this ends. */
 .scrub-win {
@@ -1449,14 +1337,6 @@ body[data-embed] #grain,
 body[data-embed] #status { display: none !important; }
 body[data-embed] #board { top: 0; height: 100%; }
 
-/* Opt-OUT of the #viewpanel overlay (zoom bar + minimap) by param only:
-   ?viewpanel=0 sets body[data-noviewpanel]. Defaults are unchanged everywhere
-   — the League Replayer shell loads the board with ?embed=1 and KEEPS zoom +
-   minimap (that's why #271 blanket-hiding the panel in all embeds was reverted
-   in #272). Only surfaces that explicitly ask — billboards (Lobby hero) and
-   thumbnail capture — append &viewpanel=0 to drop the panel. Independent of
-   embed: the two params don't touch each other. */
-body[data-noviewpanel] #viewpanel { display: none !important; }
 /* ============================================================
    HIVE additions. Everything above this line is paintbot's broadcast chrome,
    kept verbatim so the scrubber, transport, clock, endcard, banner lane, kill
@@ -1599,7 +1479,6 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
    the composition is checked THERE, not at desktop width. --- */
 @media (max-width: 640px) {
   #doctrinebar { display: none !important; }
-  #viewpanel { display: none !important; }
   #nestbug { gap: 4px; left: 4px; }
   #nestbug .nb { padding: 2px 4px; gap: 3px; }
   #nestbug .nb .lbl { display: none; }
@@ -1660,20 +1539,6 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     <div id="doctrinebar"></div>
     <!-- Trail-war hatch overlay, positioned over the contested block. -->
     <div id="warflash"></div>
-
-    <div id="viewpanel">
-      <div id="minimap" title="Click or drag to move the view">
-        <canvas id="minimap-canvas"></canvas>
-        <span class="mm-cap">View</span>
-      </div>
-      <div id="zoombar" role="group" aria-label="Board zoom">
-        <button class="zbtn" id="zoom-out" title="Zoom out (x)" aria-label="Zoom out">&minus;</button>
-        <input id="zoom-slider" type="range" min="0" max="1000" step="1" value="0"
-               aria-label="Board zoom" aria-valuetext="Fitted">
-        <button class="zbtn" id="zoom-in" title="Zoom in (z)" aria-label="Zoom in">+</button>
-        <span id="zoom-read" aria-live="off">FIT</span>
-      </div>
-    </div>
 
     <div id="mmwarn">Replay hash mismatch &mdash; showing recorded inputs</div>
     <div id="bannerlane"></div>
@@ -1760,7 +1625,8 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
   var C = window.ChromeCommon({
     send: function (cmd) { command(cmd); },
     sendPov: function () { /* hive has no per-ant POV: colonies are the unit */ },
-    getState: function () { return state; }
+    getState: function () { return state; },
+    seek: function (tick) { seek(tick); state.pl = false; renderChrome(); }
   });
   // Colony hues over the inherited team slots, so the momentum curve and the
   // scrubber beat markers are drawn in the colonies' own colours.
@@ -1853,9 +1719,22 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     // Scrubber beats: cache spawns, trail wars and raids are the ticks a
     // highlight-reel scrub jumps between.
     (replay.events || []).forEach(function (e) {
-      if (e.type === 'source_spawn') C.markBeat(e.t, 'flag', '');
-      else if (e.type === 'trail_war') C.markBeat(e.t, 'kill', 'red');
-      else if (e.type === 'raid') C.markBeat(e.t, 'kill', 'yellow');
+      // Each marker is a button that seeks to its tick (chrome_common), so
+      // it carries a plain-words label for the tooltip; wars and raids are
+      // tinted by the colony that started them.
+      if (e.type === 'source_spawn') {
+        C.markBeat(e.t, e.kind === 'bonanza' ? 'bonanza' : 'spawn', '',
+          e.kind === 'bonanza' ? 'Bonanza at the centre' :
+            'Caches spawn (' + (e.sources || []).length + ')');
+      } else if (e.type === 'trail_war') {
+        var wa = seatOfAlias(e.colonies[0]);
+        C.markBeat(e.t, 'war', wa >= 0 ? TEAMS[wa] : '',
+          'Trail war \u2014 ' + e.colonies.join(' vs '));
+      } else if (e.type === 'raid') {
+        var ra = seatOfAlias(e.colony);
+        C.markBeat(e.t, 'raid', ra >= 0 ? TEAMS[ra] : '',
+          'Raid \u2014 ' + e.colony + ' lifts from ' + e.victim);
+      }
     });
     // Lull spans: 240-tick stretches with no deliver, no source_spawn and no
     // trail_war run at 16x under the inherited skip machinery.
@@ -2149,6 +2028,11 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     feedLines = [];
     $('killfeed').innerHTML = '';
     state.ph = state.t >= replay.tick_count ? 'gameover' : 'playing';
+    // A seek back into the match takes the score screen down; a seek to the
+    // very end puts it up. The card stops above the transport band, so the
+    // scrubber is always reachable beneath it either way.
+    if (state.ph === 'gameover') renderEndcard();
+    else $('endcard').classList.remove('on');
     renderChrome();
   }
 
