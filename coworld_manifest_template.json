@@ -1,164 +1,276 @@
 {
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/coworld/main/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "swarm",
+    "stigmergy",
+    "foraging",
+    "pheromones",
+    "one-policy-many-bodies",
+    "llm-driven",
+    "real-time",
+    "four-player",
+    "constant-sum"
+  ],
+  "episode_timeout_minutes": 20,
   "game": {
     "name": "hive",
     "owner": "daveey@softmax.com",
     "description": "Four ant colonies foraging one meadow. Each seat is one policy driving twenty-four identical ants that see one cell around themselves, drop and smell two decaying pheromones, and carry food home. No messaging: coordination has to be stigmergic. Scored by your share of all food returned.",
-    "episode_timeout_minutes": 20,
     "runnable": {
+      "type": "game",
       "image": "{{HIVE_IMAGE}}",
       "run": [
         "/bin/hive"
       ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/hive/anthropic_api_key"
+      },
       "source_url": "https://github.com/Metta-AI/cogame-hive/tree/main"
     },
     "replay_viewer": {
       "bundle": "static-replay-viewer"
     },
     "config_schema": {
-      "tokens": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "One auth token per seat."
-      },
-      "players": {
-        "type": "array",
-        "default": [
-          {
-            "name": "P1"
-          },
-          {
-            "name": "P2"
-          },
-          {
-            "name": "P3"
-          },
-          {
-            "name": "P4"
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "description": "One connection token per seat, injected by the runner and indexed by slot.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "minLength": 1
           }
-        ],
-        "description": "Per-seat player names."
-      },
-      "seed": {
-        "type": "integer",
-        "default": 0,
-        "description": "Episode seed. Unpinned means randomized."
-      },
-      "num_agents": {
-        "type": "integer",
-        "default": 4,
-        "description": "Colonies. Hive seats exactly four."
-      },
-      "antsPerColony": {
-        "type": "integer",
-        "default": 24
-      },
-      "episodeTicks": {
-        "type": "integer",
-        "default": 4800
-      },
-      "turnTicks": {
-        "type": "integer",
-        "default": 240
-      },
-      "antStepTicks": {
-        "type": "integer",
-        "default": 2
-      },
-      "cellPx": {
-        "type": "integer",
-        "default": 8
-      },
-      "pheromoneMax": {
-        "type": "integer",
-        "default": 4000
-      },
-      "pheromoneFloor": {
-        "type": "integer",
-        "default": 4
-      },
-      "pheromoneDecayNum": {
-        "type": "integer",
-        "default": 248
-      },
-      "decayPeriodTicks": {
-        "type": "integer",
-        "default": 8
-      },
-      "nestSenseCells": {
-        "type": "integer",
-        "default": 12
-      },
-      "maxOrbits": {
-        "type": "integer",
-        "default": 3
-      },
-      "sourceSpawnPeriod": {
-        "type": "integer",
-        "default": 240
-      },
-      "sourceAmount": {
-        "type": "integer",
-        "default": 60
-      },
-      "sourceLifeTicks": {
-        "type": "integer",
-        "default": 1440
-      },
-      "minNestClearance": {
-        "type": "integer",
-        "default": 14
-      },
-      "bonanzaTicks": {
-        "type": "array",
-        "items": {
+        },
+        "players": {
+          "description": "One player display-name object per seat, indexed by slot.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "num_agents": {
+          "description": "Colonies. Hive seats exactly four: the corner set is closed under both mirror axes, so every colony's situation is identical.",
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 4,
+          "default": 4
+        },
+        "seed": {
+          "description": "Pins the seat-to-nest permutation, the orbit spawn cells, the kernel tie-noise and the release-bearing draw. Unpinned means randomized.",
           "type": "integer"
         },
-        "default": [
-          1200,
-          3600
-        ]
-      },
-      "bonanzaAmount": {
-        "type": "integer",
-        "default": 100
-      },
-      "bonanzaLifeTicks": {
-        "type": "integer",
-        "default": 900
-      },
-      "raidRadius": {
-        "type": "integer",
-        "default": 20
-      },
-      "trailWarThreshold": {
-        "type": "integer",
-        "default": 800
-      },
-      "turnBudgetSeconds": {
-        "type": "number",
-        "default": 22
-      },
-      "wallClockBudgetSeconds": {
-        "type": "number",
-        "default": 660
-      },
-      "playerConnectTimeoutSeconds": {
-        "type": "number",
-        "default": 90
-      },
-      "fieldPath": {
-        "type": "string",
-        "default": "meadow"
-      },
-      "showPlayerLabels": {
-        "type": "boolean",
-        "default": true
-      },
-      "gameOverTicks": {
-        "type": "integer",
-        "default": 96
+        "antsPerColony": {
+          "description": "Bodies per colony. 24 in every shipped variant.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "default": 24
+        },
+        "episodeTicks": {
+          "description": "Episode length in 24 Hz ticks.",
+          "type": "integer",
+          "minimum": 240,
+          "maximum": 14400,
+          "default": 4800
+        },
+        "turnTicks": {
+          "description": "Ticks between decision turns; one doctrine per colony per turn.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 1200,
+          "default": 240
+        },
+        "antStepTicks": {
+          "description": "An ant acts once every this many ticks.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 2
+        },
+        "cellPx": {
+          "description": "Pixels per cell on the rendered board.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 8
+        },
+        "pheromoneMax": {
+          "description": "Saturation value of a pheromone cell.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 4000
+        },
+        "pheromoneFloor": {
+          "description": "A decayed cell below this becomes exactly 0.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 4
+        },
+        "pheromoneDecayNum": {
+          "description": "Decay numerator: p <- (p * n) shr 8, applied every decayPeriodTicks ticks.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 248
+        },
+        "decayPeriodTicks": {
+          "description": "Ticks between decay sweeps.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 240,
+          "default": 8
+        },
+        "nestSenseCells": {
+          "description": "Path integration range: beyond this a laden ant only knows the way home by the home trail.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80,
+          "default": 12
+        },
+        "maxOrbits": {
+          "description": "Live four-source orbits allowed at once.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12,
+          "default": 3
+        },
+        "sourceSpawnPeriod": {
+          "description": "Ticks between orbit spawn opportunities.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 4800,
+          "default": 240
+        },
+        "sourceAmount": {
+          "description": "Units in each source of an orbit.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 60
+        },
+        "sourceLifeTicks": {
+          "description": "Ticks before an orbit source expires.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 14400,
+          "default": 1440
+        },
+        "minNestClearance": {
+          "description": "Chebyshev cells an orbit must keep from every nest centre.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 14
+        },
+        "bonanzaTicks": {
+          "description": "Ticks at which the four centre-block bonanza sources spawn.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxItems": 8,
+          "default": [
+            1200,
+            3600
+          ]
+        },
+        "bonanzaAmount": {
+          "description": "Units in each bonanza source.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 100
+        },
+        "bonanzaLifeTicks": {
+          "description": "Ticks before a bonanza source expires.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 14400,
+          "default": 900
+        },
+        "raidRadius": {
+          "description": "Chebyshev cells around a nest inside which a lifted unit counts as a raid on that colony.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80,
+          "default": 20
+        },
+        "trailWarThreshold": {
+          "description": "Block-mean food trail two colonies must both exceed for a trail_war event.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 800
+        },
+        "turnBudgetSeconds": {
+          "description": "Wall-clock budget for one decision turn, including the LLM batch and its one retry.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 22
+        },
+        "wallClockBudgetSeconds": {
+          "description": "Engine hard stop. Past it the episode ends deadline/wall_clock with the counters as they stand.",
+          "type": "number",
+          "minimum": 10,
+          "maximum": 1200,
+          "default": 660
+        },
+        "playerConnectTimeoutSeconds": {
+          "description": "Bounded wait for the seats to connect before the match starts anyway.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 600,
+          "default": 90
+        },
+        "episodeTimeoutSeconds": {
+          "description": "Wall clock the game assumes the platform allows when COWORLD_TIMEOUT_SECONDS is absent, which it always is for the game container.",
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 6000,
+          "default": 1200
+        },
+        "fieldPath": {
+          "description": "Name of the authored field spec under data/.",
+          "type": "string",
+          "minLength": 1,
+          "default": "meadow"
+        },
+        "showPlayerLabels": {
+          "description": "Whether the SPECTATOR feed carries real policy names beside the colony aliases.",
+          "type": "boolean",
+          "default": true
+        },
+        "gameOverTicks": {
+          "description": "Ticks the endcard holds after the final tick.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1200,
+          "default": 96
+        }
       }
     },
     "results_schema": {
@@ -420,27 +532,29 @@
           }
         }
       ]
-    },
-    "player": [
-      {
-        "id": "baseline",
-        "name": "marcher",
-        "type": "player",
-        "image": "{{HIVE_IMAGE}}",
-        "run": [
-          "/bin/hive-player"
-        ],
-        "env": {
-          "PLAYER_SCRIPTED": "marcher"
-        },
-        "source_url": "https://github.com/Metta-AI/cogame-hive/tree/main"
-      }
-    ]
+    }
   },
+  "player": [
+    {
+      "id": "baseline",
+      "type": "player",
+      "name": "Hive Marcher Baseline",
+      "description": "The scripted marcher: opens wide with scouts near 60 and a weak trail, inverts to a hard pump the moment a cache shows up in its sources list, and recalls for one turn when deliveries collapse. Registers its seat as rule-based, so the game server plays it deterministically with no LLM. It is also the fallback every LLM seat lands on.",
+      "image": "{{HIVE_IMAGE}}",
+      "run": [
+        "/bin/hive-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "marcher"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-hive/tree/main"
+    }
+  ],
   "variants": [
     {
       "id": "default",
       "name": "Meadow (4 colonies, 200 s)",
+      "description": "The full meadow: 4800 ticks, twenty decision turns, two centre bonanzas.",
       "game_config": {
         "players": [
           {
@@ -473,6 +587,7 @@
     {
       "id": "sprint",
       "name": "Sprint meadow (4 colonies, 120 s)",
+      "description": "A cheap ladder round: 2880 ticks, twelve turns, one centre bonanza. Same four seats, same 24 ants.",
       "game_config": {
         "players": [
           {

@@ -36,9 +36,14 @@ proc main() =
     report("num_agents is 4 in every variant and in the cert fixture")
 
   block budgets:
-    checkEqual(game["episode_timeout_minutes"].getInt(), 20,
-      "episode_timeout_minutes is 20")
-    let platform = game["episode_timeout_minutes"].getInt() * 60
+    ## `episode_timeout_minutes` is a TOP-LEVEL manifest key: the CLI's
+    ## CoworldGameManifest forbids extras, so under `game` it is a hard
+    ## validation error.
+    check(not game.hasKey("episode_timeout_minutes"),
+      "episode_timeout_minutes must NOT sit under game")
+    checkEqual(manifest["episode_timeout_minutes"].getInt(), 20,
+      "episode_timeout_minutes is 20, at the top level")
+    let platform = manifest["episode_timeout_minutes"].getInt() * 60
     for variant in manifest["variants"]:
       let budget = variant["game_config"]["wallClockBudgetSeconds"].getFloat()
       check(budget * 10 <= platform.float * 6,
@@ -69,14 +74,50 @@ proc main() =
     check("network: host" in compose, "compose builds with network: host")
     checkEqual(game["runnable"]["run"][0].getStr(), "/bin/hive",
       "the game entrypoint")
-    checkEqual(game["player"][0]["run"][0].getStr(), "/bin/hive-player",
+    checkEqual(game["runnable"]["type"].getStr(), "game",
+      "game.runnable.type is required and must be 'game'")
+    checkEqual(game["runnable"]["env"]["ANTHROPIC_API_KEY_URI"].getStr(),
+      "secret://coworld/hive/anthropic_api_key",
+      "the hosted game is handed the Coworld secret; without it every seat " &
+      "plays scripted")
+    ## Bundled players live at the TOP level, not under `game`.
+    check(not game.hasKey("player"), "game.player must NOT exist")
+    check(manifest.hasKey("player") and manifest["player"].len >= 1,
+      "the manifest declares at least one bundled player")
+    let bundled = manifest["player"][0]
+    checkEqual(bundled["id"].getStr(), "baseline", "the bundled player id")
+    checkEqual(bundled["type"].getStr(), "player", "its role type")
+    check(bundled["name"].getStr().len > 0, "it has a name")
+    check(bundled["description"].getStr().len > 0, "it has a description")
+    checkEqual(bundled["run"][0].getStr(), "/bin/hive-player",
       "the bundled player entrypoint")
-    checkEqual(game["player"][0]["env"]["PLAYER_SCRIPTED"].getStr(), "marcher",
+    checkEqual(bundled["env"]["PLAYER_SCRIPTED"].getStr(), "marcher",
       "the certification player is the marcher, no LLM")
-    checkEqual(game["player"][0]["image"].getStr(),
-      game["runnable"]["image"].getStr(),
+    checkEqual(bundled["image"].getStr(), game["runnable"]["image"].getStr(),
       "one image, two entrypoints")
+    ## The certifier's players-run step needs every declared player seated by
+    ## at least one certification slot.
+    for entry in manifest["player"]:
+      var seated = false
+      for slot in manifest["certification"]["players"]:
+        if slot["player_id"].getStr() == entry["id"].getStr():
+          seated = true
+      check(seated, "bundled player " & entry["id"].getStr() &
+        " is seated by a certification slot")
     report("the image placeholder matches the compose service name")
+
+  block topLevelShape:
+    ## The upload contract the CLI validates: $schema, >= 3 tags, game,
+    ## player, variants, certification.
+    check(manifest.hasKey("$schema"), "the manifest points at its schema")
+    check(manifest["tags"].len >= 3, "at least three discovery tags")
+    for key in ["game", "player", "variants", "certification"]:
+      check(manifest.hasKey(key), "the manifest carries " & key)
+    for variant in manifest["variants"]:
+      check(variant.hasKey("description") and
+        variant["description"].getStr().len > 0,
+        "variant " & variant["id"].getStr() & " has a description")
+    report("the top-level manifest shape matches the upload contract")
 
   block staticViewer:
     checkEqual(game["replay_viewer"]["bundle"].getStr(),
@@ -147,7 +188,20 @@ proc main() =
     report("results_schema is key-for-key what the server emits")
 
   block configSchema:
-    let schema = game["config_schema"]
+    ## A real JSON Schema document: the CLI requires `tokens` in `required`
+    ## and a string-array `tokens` property with integer minItems/maxItems.
+    let document = game["config_schema"]
+    checkEqual(document["type"].getStr(), "object", "config_schema is a schema")
+    var requiresTokens = false
+    for entry in document["required"]:
+      if entry.getStr() == "tokens": requiresTokens = true
+    check(requiresTokens, "config_schema requires tokens")
+    let tokens = document["properties"]["tokens"]
+    checkEqual(tokens["type"].getStr(), "array", "tokens is an array")
+    checkEqual(tokens["items"]["type"].getStr(), "string", "of strings")
+    checkEqual(tokens["minItems"].getInt(), Colonies, "with four seats min")
+    checkEqual(tokens["maxItems"].getInt(), Colonies, "and four seats max")
+    let schema = document["properties"]
     for key in ["tokens", "players", "seed", "num_agents", "antsPerColony",
         "episodeTicks", "turnTicks", "antStepTicks", "cellPx", "pheromoneMax",
         "pheromoneFloor", "pheromoneDecayNum", "decayPeriodTicks",
@@ -160,6 +214,16 @@ proc main() =
       check(schema.hasKey(key), "config_schema declares " & key)
     checkEqual(schema["num_agents"]["default"].getInt(), Colonies,
       "num_agents defaults to four")
+    ## additionalProperties: false means every key a variant or the fixture
+    ## uses must be declared, or `coworld build` rejects the manifest.
+    checkEqual(document["additionalProperties"].getBool(), false,
+      "the config schema is closed")
+    for source in @[manifest["certification"]["game_config"]] &
+        @[manifest["variants"][0]["game_config"],
+          manifest["variants"][1]["game_config"]]:
+      for key, _ in source:
+        check(schema.hasKey(key),
+          "config_schema declares the fixture/variant key " & key)
     ## Every schema default must match the engine default, or the hosted
     ## episode plays a different game from the documented one.
     let defaults = defaultGameConfig()
