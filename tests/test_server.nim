@@ -54,12 +54,18 @@ proc runNoShowServer() =
   ## Nobody connects. The episode must still play to full time on the
   ## marcher, and the LOWEST offending slot must be reported to
   ## COGAME_PLAYER_FAILURE_URI.
+  ##
+  ## The wall-clock budget is squeezed to 40 s so the SHIPPED budget guard in
+  ## server.nim - `elapsed + 2 * turnBudgetSeconds > wallBudget`, 2 x 22 = 44
+  ## - engages on the first turn. It must settle the episode on the scripted
+  ## layer and still end complete/full_time, not deadline.
   let work = getEnv("HIVE_TEST_WORK")
   var config = defaultGameConfig()
   config.seed = 42
   config.episodeTicks = 480
   config.turnTicks = 240
   config.playerConnectTimeoutSeconds = 2.0
+  config.wallClockBudgetSeconds = 40.0
   config.bonanzaTicks = @[]
   config.players = @[
     PlayerConfig(name: "P1"), PlayerConfig(name: "P2"),
@@ -69,6 +75,7 @@ proc runNoShowServer() =
   putEnv("COGAME_RESULTS_URI", "file://" & work / "noshow-results.json")
   putEnv("COGAME_SAVE_REPLAY_URI", "file://" & work / "noshow-replay.json")
   putEnv("COGAME_PLAYER_FAILURE_URI", "file://" & work / "player_failure.json")
+  putEnv("COGAME_EVENTS_URI", "file://" & work / "noshow-events.jsonl")
   var runtime = RuntimeConfig(host: "127.0.0.1", port: NoShowPort)
   runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
   runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
@@ -260,9 +267,27 @@ proc main() =
     checkEqual(results["end_rule"].getStr(), "full_time",
       "it plays to full time on the marcher")
     checkEqual(results["scores"].len, Colonies, "and scores all four seats")
+
+    ## The SHIPPED budget guard, exercised through server.nim's own closure
+    ## rather than a re-implementation: the fixture's 40 s wall budget is
+    ## less than 2 x turnBudgetSeconds, so it engages on turn 0, the whole
+    ## match runs on the scripted layer, and the episode still completes.
+    check(fileExists(work / "noshow-events.jsonl"),
+      "the no-show episode writes its events")
+    var guards = 0
+    for line in readFile(work / "noshow-events.jsonl").strip().splitLines():
+      let event = parseJson(line)
+      if event{"type"}.getStr() == "budget_guard":
+        inc guards
+        check(event.hasKey("remaining_s"),
+          "the budget_guard event records the remaining budget")
+    checkEqual(guards, 1,
+      "the shipped budget guard engages exactly once and records the turn")
+
     child.terminate()
     discard child.waitForExit()
-    report("a no-show plays the marcher, is reported, and still completes")
+    report("a no-show plays the marcher, is reported, the budget guard " &
+      "engages, and the episode still completes")
 
   ## ---- URI scheme rejection ----------------------------------------------
   block uriSchemes:
