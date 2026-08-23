@@ -73,13 +73,18 @@ proc moveAnt*(
   colony: int,
   kernel: Kernel,
   coefficients: Coefficients,
-  rng: var Pcg
+  rng: var Pcg,
+  recalled = false
 ) =
   ## One activation's movement. Draws exactly three noise values first, in
   ## candidate order, so the draw count per activation is constant whatever
   ## the terrain does.
+  ##
+  ## `recalled` is resolution step 4: a recalled ant runs the CARRYING kernel
+  ## regardless of its carrying flag, so it walks home on the home trail
+  ## instead of being repelled by it (`searchScore` subtracts alphaHome).
   let dirs = candidateDirs(int(ant.heading))
-  let carrying = ant.carrying
+  let carrying = ant.carrying or recalled
   var noise: array[3, int]
   for k in 0 .. 2:
     noise[k] =

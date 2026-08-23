@@ -210,6 +210,71 @@ proc main() =
       "the ant standing on a rival pad kept its load")
     report("delivery increments one counter and only on the ant's own pad")
 
+  block recallUsesTheCarryingKernel:
+    ## Resolution step 4: a recalled ant runs the CARRYING kernel REGARDLESS
+    ## of its carrying flag. Under the searching kernel it is repelled by the
+    ## very home trail it has to follow (alphaHome is subtracted), so it
+    ## reaches its pad only by chance.
+    var planes = initPlanes(meadow.cols, meadow.rows)
+    let nest = meadow.nests[0]
+    var coefficients = flatCoefficients()
+    coefficients.alphaHome = 300
+    let sx = nest.cx + 40
+    let sy = nest.cy + 20
+    check(meadow.isFree(sx, sy), "the probe cell is free floor")
+    check(chebyshev(sx, sy, nest.cx, nest.cy) > 12,
+      "the probe ant is beyond the nest-sense radius, so only H steers it")
+    let dirs = candidateDirs(0)
+    planes.deposit(0, PlaneHome, sx + DirX[dirs[0]], sy + DirY[dirs[0]],
+      4000, 4000)
+
+    var searching = Ant(cx: int32(sx), cy: int32(sy), heading: 0,
+      carrying: false, carriedFrom: -1)
+    var rngA = initPcg(3)
+    moveAnt(searching, meadow, planes, emptyFood, 0, kernelFor(meadow, 0),
+      coefficients, rngA)
+    check(int(searching.heading) != dirs[0],
+      "a searching ant is REPELLED by its own home trail")
+
+    var homing = Ant(cx: int32(sx), cy: int32(sy), heading: 0,
+      carrying: false, carriedFrom: -1)
+    var rngB = initPcg(3)
+    moveAnt(homing, meadow, planes, emptyFood, 0, kernelFor(meadow, 0),
+      coefficients, rngB, recalled = true)
+    checkEqual(int(homing.heading), dirs[0],
+      "a recalled EMPTY ant rides the home trail like a laden one")
+    report("recall puts an empty ant on the carrying kernel")
+
+  block recallGathersTheColony:
+    ## The same rule through the real step: an empty colony parked eight cells
+    ## out with recall installed walks home and holds, inside one turn.
+    var quiet = testConfig(240, 9)
+    quiet.maxOrbits = 0
+    quiet.bonanzaTicks = @[]
+    var match = newSim(quiet, meadow)
+    let colony = 0
+    let nest = meadow.nests[colony]
+    check(meadow.isFree(nest.cx + 8, nest.cy), "the muster cell is free floor")
+    for index in 0 ..< quiet.antsPerColony:
+      match.antState[colony * quiet.antsPerColony + index] =
+        Ant(cx: int32(nest.cx + 8), cy: int32(nest.cy), heading: 0,
+          carrying: false, carriedFrom: -1)
+    var resolved: array[Colonies, ResolvedDoctrine]
+    for seat in 0 ..< Colonies:
+      var doctrine = defaultDoctrine()
+      doctrine.recall = match.seatNest[seat] == colony
+      resolved[seat] = ResolvedDoctrine(doctrine: doctrine, source: dsScripted)
+    match.installDoctrines(resolved)
+    while match.tick < quiet.turnTicks:
+      match.stepTick()
+    var held = 0
+    for index in 0 ..< quiet.antsPerColony:
+      if match.antState[colony * quiet.antsPerColony + index].held:
+        inc held
+    checkEqual(held, quiet.antsPerColony,
+      "every recalled ant reached its own pad and is holding")
+    report("a recalled colony musters at its nest inside one turn")
+
   block noFloatInTheStep:
     ## The determinism contract, enforced by grep. `-ffast-math` is banned and
     ## no libm call or float arithmetic may appear anywhere in the step path.

@@ -10,12 +10,16 @@
 ## builds agree bit-for-bit with no float anywhere in the step.
 ##
 ## Rules changelog (prepend-only, paintbot's convention):
+##   GV2 (recall walks home): a recalled ant runs the CARRYING kernel in
+##     step 8 regardless of its carrying flag, so it rides the home trail
+##     home instead of being repelled by it. Neither committed fixture
+##     carries recall: true, so the recorded digests are unchanged.
 ##   GV1 (forage): four colonies, two pheromone planes, doctrine turns.
 
 
 
 const
-  GameVersion* = "1"
+  GameVersion* = "2"
     ## Rules gate. Bump on any change to the integer step.
 
   TargetFps* = 24

@@ -440,7 +440,7 @@ proc runAnts(sim: Sim) =
       let beforeX = sim.antState[g].cx
       let beforeY = sim.antState[g].cy
       moveAnt(sim.antState[g], sim.meadow, sim.planes, sim.sources.foodNear,
-        colony, kernel, coefficient, sim.rng)
+        colony, kernel, coefficient, sim.rng, recalled)
       moved = sim.antState[g].cx != beforeX or sim.antState[g].cy != beforeY
 
     ## Step 9: release.
