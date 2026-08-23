@@ -67,12 +67,15 @@ proc contactsJson(match: Sim, colony: int): JsonNode =
     if rival == colony:
       continue
     var blocks = newJArray()
-    var count = 0
     for index in 0 ..< BlockCount:
-      let hits = match.contactCount[colony][rival][index]
-      if hits > 0:
+      if match.contactCount[colony][rival][index] > 0:
         blocks.add(%[blockX(index), blockY(index)])
-        count += hits
+    ## "how many of YOUR ants were involved" - distinct bodies, not the
+    ## number of co-location samples the scan took over the turn.
+    var count = 0
+    for involved in match.contactAnts[colony][rival]:
+      if involved:
+        inc count
     if blocks.len > 0:
       result.add(%*{
         "colony": match.meadow.nests[rival].alias,

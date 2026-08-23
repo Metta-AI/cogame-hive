@@ -111,6 +111,35 @@ proc main() =
       "at least one listed amount_seen is stale, proving it is not live")
     report("sources[] is discovery-gated and reports last-seen amounts")
 
+  block contactsCountAnts:
+    ## `contacts[].ants` is how many of YOUR ants met that rival - distinct
+    ## bodies, never the number of co-location samples the 4-tick scan took,
+    ## which over a whole turn can exceed the colony's entire roster.
+    var quiet = testConfig(240, 11)
+    quiet.maxOrbits = 0
+    quiet.bonanzaTicks = @[]
+    var match = newSim(quiet, meadow)
+    let meetX = 80
+    let meetY = 44
+    check(meadow.isFree(meetX, meetY), "the meeting cell is free floor")
+    for colony in 0 .. 1:
+      for index in 0 ..< quiet.antsPerColony:
+        match.antState[colony * quiet.antsPerColony + index] =
+          Ant(cx: int32(meetX), cy: int32(meetY), heading: 0,
+            carrying: false, carriedFrom: -1)
+    match.stepTick()
+    for colony in 0 .. 1:
+      var found = false
+      for entry in buildView(match, match.seatOfNest(colony))["contacts"]:
+        found = true
+        let ants = entry["ants"].getInt()
+        check(ants >= 1, "a listed contact involves at least one ant")
+        check(ants <= quiet.antsPerColony,
+          "contacts[].ants (" & $ants & ") never exceeds the roster of " &
+          $quiet.antsPerColony)
+      check(found, "two colonies standing on one cell are in contact")
+    report("contacts[].ants counts distinct ants, never co-location samples")
+
   block scoreboardIsPublic:
     var match = newSim(testConfig(480, 3), meadow)
     match.runEpisode(scriptedProvider(allMarcher()))

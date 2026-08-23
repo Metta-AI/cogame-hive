@@ -60,6 +60,10 @@ type
 
     sensed*: array[Colonies, seq[int]]
     contactCount*: array[Colonies, array[Colonies, seq[int]]]
+    contactAnts*: array[Colonies, array[Colonies, seq[bool]]]
+      ## Which of YOUR ants met that rival this turn, one flag per ant. The
+      ## view reports the count of distinct ants involved, not the number of
+      ## co-location samples.
     seenAmount*: array[Colonies, seq[int]]
     seenTurn*: array[Colonies, seq[int]]
 
@@ -121,6 +125,7 @@ proc newSim*(gameConfig: GameConfig, meadow: Field,
       result.sensed[colony][index] = -1000
     for rival in 0 ..< Colonies:
       result.contactCount[colony][rival] = newSeq[int](BlockCount)
+      result.contactAnts[colony][rival] = newSeq[bool](gameConfig.antsPerColony)
     result.seenAmount[colony] = @[]
     result.seenTurn[colony] = @[]
     result.doctrines[colony] = defaultDoctrine()
@@ -241,6 +246,8 @@ proc installDoctrines*(sim: Sim, resolved: array[Colonies, ResolvedDoctrine]) =
     for rival in 0 ..< Colonies:
       for index in 0 ..< BlockCount:
         sim.contactCount[colony][rival][index] = 0
+      for index in 0 ..< sim.contactAnts[colony][rival].len:
+        sim.contactAnts[colony][rival][index] = false
 
   var delivered: array[Colonies, int]
   for seat in 0 ..< Colonies:
@@ -495,6 +502,7 @@ proc scanContacts(sim: Sim) =
           break
       if shared:
         sim.contactCount[colony][other][blockOf(cx, cy)].inc
+        sim.contactAnts[colony][other][g mod perColony] = true
 
 proc scanTrailWars(sim: Sim) =
   ## Step 10.
