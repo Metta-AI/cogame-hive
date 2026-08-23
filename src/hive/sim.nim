@@ -39,6 +39,7 @@ type
     rng*: Pcg
     tick*: int
     turn*: int
+    turnRolled*: int   ## the last turn `beginTurn` rolled; -1 before the first
 
     seatNest*: array[Colonies, int]   ## seat -> nest (the colony it drives)
     nestSeat*: array[Colonies, int]   ## nest -> seat
@@ -106,7 +107,7 @@ proc newSim*(gameConfig: GameConfig, meadow: Field,
   ## stream, exactly once, so every later draw is a function of the seed and
   ## the doctrines alone.
   result = Sim(config: gameConfig, meadow: meadow, recording: true,
-    lastDigestTick: -1)
+    lastDigestTick: -1, turnRolled: -1)
   result.rng = initPcg(gameConfig.seed)
   result.seatNest = seatPermutation(result.rng)
   result.nestSeat = invert(result.seatNest)
@@ -199,6 +200,8 @@ proc takeSnapshot*(sim: Sim): Snapshot =
 proc restoreSnapshot*(sim: Sim, snapshot: Snapshot) =
   sim.tick = snapshot.tick
   sim.turn = snapshot.turn
+  ## A rewound turn is re-entered from the top, so its clock must roll again.
+  sim.turnRolled = snapshot.turn - 1
   sim.planes = snapshot.planes
   sim.sources = snapshot.sources
   sim.antState = snapshot.antState
@@ -208,13 +211,31 @@ proc restoreSnapshot*(sim: Sim, snapshot: Snapshot) =
 
 # ---- turn install (resolution step 1) ---------------------------------------
 
-proc installDoctrines*(sim: Sim, resolved: array[Colonies, ResolvedDoctrine]) =
-  ## Step 1. `resolved` is indexed by SEAT; colony state is indexed by NEST.
-  sim.turn = sim.tick div sim.config.turnTicks
+proc beginTurn*(sim: Sim) =
+  ## The first half of step 1, and it runs BEFORE the per-seat views are
+  ## built: the turn clock advances and `delivered_last_turn` rolls. Doing it
+  ## here rather than inside `installDoctrines` is what makes the view a seat
+  ## sees for turn N read `"turn": N` and report the deliveries of turn N-1,
+  ## which is the schema the design note pins. `sensed` and `contacts` are
+  ## NOT cleared here - the view for turn N is exactly the record of turn
+  ## N-1's walking, so they are cleared in `installDoctrines`, after it.
+  ##
+  ## Idempotent within a turn, so a caller that only calls `installDoctrines`
+  ## still gets a correct clock.
+  let turn = sim.tick div sim.config.turnTicks
+  if sim.turnRolled == turn:
+    return
+  sim.turnRolled = turn
+  sim.turn = turn
   for colony in 0 ..< Colonies:
     sim.deliveredLastTurn[colony] =
       sim.delivered[colony] - sim.deliveredTurnStart[colony]
     sim.deliveredTurnStart[colony] = sim.delivered[colony]
+
+proc installDoctrines*(sim: Sim, resolved: array[Colonies, ResolvedDoctrine]) =
+  ## Step 1. `resolved` is indexed by SEAT; colony state is indexed by NEST.
+  sim.beginTurn()
+  for colony in 0 ..< Colonies:
     for index in 0 ..< BlockCount:
       sim.sensed[colony][index] = -1000
     for rival in 0 ..< Colonies:

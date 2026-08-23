@@ -43,6 +43,40 @@ proc main() =
       check(dots > 0, "seat " & $seat & " is blind somewhere")
     report("trails.rival shows a digit only where your own ants walked")
 
+  block viewClockIsCurrent:
+    ## The view handed to a policy for turn N must read `"turn": N` - not
+    ## N-1 - and `delivered_last_turn` must be the deliveries of turn N-1,
+    ## not of turn N-2. The marcher reads it as a fuel gauge and champion #1's
+    ## prompt says to watch it, so a two-turn lag is a real misread.
+    var match = newSim(testConfig(1440, 42), meadow)
+    var seenTurns: seq[int]
+    var seenTicks: seq[int]
+    var gauge: seq[int]
+    var runningTotal: seq[int]
+    let inner = scriptedProvider(allMarcher())
+    let recording = proc (m: Sim, turn: int):
+        array[Colonies, ResolvedDoctrine] {.closure.} =
+      let view = buildView(m, 0)
+      seenTurns.add(view["turn"].getInt())
+      seenTicks.add(view["tick"].getInt())
+      gauge.add(view["you"]["delivered_last_turn"].getInt())
+      runningTotal.add(m.delivered[m.seatNest[0]])
+      inner(m, turn)
+    match.runEpisode(recording)
+    check(seenTurns.len >= 6, "the episode really ran several turns")
+    for index, turn in seenTurns:
+      checkEqual(turn, index, "the view for turn " & $index & " says turn " &
+        $index)
+      checkEqual(seenTicks[index], index * match.config.turnTicks,
+        "...and carries its own tick")
+    checkEqual(gauge[0], 0, "nothing was delivered before turn 0")
+    for index in 1 ..< seenTurns.len:
+      checkEqual(gauge[index], runningTotal[index] - runningTotal[index - 1],
+        "delivered_last_turn at turn " & $index &
+        " is the PREVIOUS turn's deliveries")
+    check(gauge[^1] > 0, "...and the gauge is not vacuously zero")
+    report("the view's turn number and fuel gauge are one turn fresh")
+
   block sourcesAreLastSeen:
     var match = newSim(testConfig(1440, 7), meadow)
     let provide = scriptedProvider(allMarcher())

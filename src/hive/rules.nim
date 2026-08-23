@@ -114,7 +114,10 @@ proc runEpisode*(
   ## is the caller's job and the reason the probe exists.
   while not match.finished:
     if match.tick mod match.config.turnTicks == 0:
-      match.installDoctrines(provide(match, match.tick div match.config.turnTicks))
+      ## The clock rolls FIRST, so the views `provide` builds carry this
+      ## turn's number and last turn's delivery count.
+      match.beginTurn()
+      match.installDoctrines(provide(match, match.turn))
     match.stepTick()
     if match.tick >= match.config.episodeTicks:
       match.endMatch(erComplete, euFullTime)
