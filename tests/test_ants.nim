@@ -147,7 +147,42 @@ proc main() =
       "a forager weighs its own trail and the rival trail")
     checkEqual(scout, (400 div 4) * 4000 shr 4,
       "a scout weighs alphaFood div 4 and ignores rival trails")
-    report("scouts get alphaFood div 4, alphaRival 0 and doubled noise")
+    report("scouts weigh alphaFood div 4 and ignore rival trails")
+
+  block scoutNoiseIsDoubled:
+    ## The third scout modifier, which searchScore cannot show because the
+    ## noise is drawn in moveAnt. Set every trail weight to zero and the
+    ## forward bonus to 100 with alphaNoise 60: a forager's noise (0..59) can
+    ## never beat the forward bonus, so it marches dead straight, while a
+    ## scout's DOUBLED noise (0..119) sometimes can.
+    var planes = initPlanes(meadow.cols, meadow.rows)
+    var coefficients = flatCoefficients()
+    coefficients.alphaFood = 0
+    coefficients.alphaRival = 0
+    coefficients.alphaHome = 0
+    coefficients.alphaFwd = 100
+    coefficients.alphaNoise = 60
+    check(coefficients.alphaNoise < coefficients.alphaFwd,
+      "the fixture's single noise really cannot beat the forward bonus")
+    var rng = initPcg(21)
+    var foragerTurns = 0
+    var scoutTurns = 0
+    for trial in 0 ..< 1000:
+      var forager = Ant(cx: 60'i32, cy: 44'i32, heading: 0, carrying: false,
+        carriedFrom: -1, scout: false)
+      moveAnt(forager, meadow, planes, emptyFood, 0, kernelFor(meadow, 0),
+        coefficients, rng)
+      if int(forager.heading) != 0: inc foragerTurns
+      var scout = Ant(cx: 60'i32, cy: 44'i32, heading: 0, carrying: false,
+        carriedFrom: -1, scout: true)
+      moveAnt(scout, meadow, planes, emptyFood, 0, kernelFor(meadow, 0),
+        coefficients, rng)
+      if int(scout.heading) != 0: inc scoutTurns
+    checkEqual(foragerTurns, 0,
+      "a forager's single-width noise never beats the forward bonus")
+    check(scoutTurns > 0,
+      "a scout's doubled noise does (" & $scoutTurns & " of 1000)")
+    report("a scout's kernel noise is drawn at twice the width")
 
   block scentAlwaysCounts:
     var planes = initPlanes(meadow.cols, meadow.rows)

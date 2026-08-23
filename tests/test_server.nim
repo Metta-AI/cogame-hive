@@ -13,6 +13,7 @@ import hive/[roster, replay, server]
 const
   LivePort = 18731
   ReplayPort = 18732
+  NoShowPort = 18733
 
 proc waitForHealth(curl: Curly, port: int, seconds = 20.0): bool =
   let deadline = epochTime() + seconds
@@ -45,6 +46,30 @@ proc runLiveServer() =
   putEnv("COGAME_SAVE_REPLAY_URI", "file://" & work / "replay.json")
   putEnv("COGAME_EVENTS_URI", "file://" & work / "events.jsonl")
   var runtime = RuntimeConfig(host: "127.0.0.1", port: LivePort)
+  runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
+  runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
+  runGameServer(config, runtime)
+
+proc runNoShowServer() =
+  ## Nobody connects. The episode must still play to full time on the
+  ## marcher, and the LOWEST offending slot must be reported to
+  ## COGAME_PLAYER_FAILURE_URI.
+  let work = getEnv("HIVE_TEST_WORK")
+  var config = defaultGameConfig()
+  config.seed = 42
+  config.episodeTicks = 480
+  config.turnTicks = 240
+  config.playerConnectTimeoutSeconds = 2.0
+  config.bonanzaTicks = @[]
+  config.players = @[
+    PlayerConfig(name: "P1"), PlayerConfig(name: "P2"),
+    PlayerConfig(name: "P3"), PlayerConfig(name: "P4")
+  ]
+  config.tokens = @["token-0", "token-1", "token-2", "token-3"]
+  putEnv("COGAME_RESULTS_URI", "file://" & work / "noshow-results.json")
+  putEnv("COGAME_SAVE_REPLAY_URI", "file://" & work / "noshow-replay.json")
+  putEnv("COGAME_PLAYER_FAILURE_URI", "file://" & work / "player_failure.json")
+  var runtime = RuntimeConfig(host: "127.0.0.1", port: NoShowPort)
   runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
   runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
   runGameServer(config, runtime)
@@ -207,6 +232,38 @@ proc main() =
     child.terminate()
     discard child.waitForExit()
 
+  ## ---- nobody connects ---------------------------------------------------
+  block noShow:
+    ## "A seat that never connects does NOT end the episode: its colony is
+    ## driven by the marcher for the whole match, the no-show is reported to
+    ## COGAME_PLAYER_FAILURE_URI (lowest offending slot only), and the match
+    ## plays to full_time."
+    let child = startProcess(self, options = {poParentStreams},
+      env = {"HIVE_TEST_SERVER": "noshow", "HIVE_TEST_WORK": work,
+             "PATH": getEnv("PATH")}.newStringTable)
+    check(waitForHealth(curl, NoShowPort), "the no-show server answers /healthz")
+    let deadline = epochTime() + 90.0
+    while epochTime() < deadline and
+        not fileExists(work / "noshow-results.json"):
+      sleep(200)
+    check(fileExists(work / "player_failure.json"),
+      "a seat that never connects is reported to COGAME_PLAYER_FAILURE_URI")
+    let failure = parseJson(readFile(work / "player_failure.json"))
+    checkEqual(failure["slot"].getInt(), 0,
+      "the LOWEST offending slot only")
+    check(failure["reason"].getStr().len > 0, "with a reason")
+    check(fileExists(work / "noshow-results.json"),
+      "the episode still writes results")
+    let results = parseJson(readFile(work / "noshow-results.json"))
+    checkEqual(results["reason"].getStr(), "complete",
+      "a no-show does not end the episode")
+    checkEqual(results["end_rule"].getStr(), "full_time",
+      "it plays to full time on the marcher")
+    checkEqual(results["scores"].len, Colonies, "and scores all four seats")
+    child.terminate()
+    discard child.waitForExit()
+    report("a no-show plays the marcher, is reported, and still completes")
+
   ## ---- URI scheme rejection ----------------------------------------------
   block uriSchemes:
     for name in ["COGAME_EVENTS_URI", "COGAME_METRICS_URI"]:
@@ -227,6 +284,7 @@ when isMainModule:
   case getEnv("HIVE_TEST_SERVER")
   of "live": runLiveServer()
   of "replay": runReplayServer()
+  of "noshow": runNoShowServer()
   else:
     main()
     echo "test_server: all checks passed"

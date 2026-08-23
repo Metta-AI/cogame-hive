@@ -120,6 +120,23 @@ proc main() =
     checkEqual(round["say"].getStr(), cut, "the truncated say round-trips")
     checkEqual(validateUtf8($doctrine.toJson()), -1,
       "the encoded doctrine is valid UTF-8")
+    ## fallback.detail is the fifth capped string and the only one fed by a
+    ## transport error message, which is exactly where a multi-byte character
+    ## can land on the cap. 200 runes, on a rune boundary, still valid UTF-8.
+    let detail = repeat("\u{00E9}", MaxDetailRunes - 1) & "\u{1F41C}" &
+      repeat("z", 40)
+    check(detail.runeLen > MaxDetailRunes, "the fixture is over the cap")
+    let cutDetail = truncateRunes(detail, MaxDetailRunes)
+    checkEqual(cutDetail.runeLen, MaxDetailRunes,
+      "fallback.detail cuts to exactly 200 runes")
+    checkEqual(cutDetail,
+      repeat("\u{00E9}", MaxDetailRunes - 1) & "\u{1F41C}",
+      "the cut keeps the whole 4-byte rune sitting on the cap")
+    checkEqual(validateUtf8(cutDetail), -1,
+      "the truncated detail is valid UTF-8")
+    let event = %*{"detail": cutDetail}
+    checkEqual(parseJson($event)["detail"].getStr(), cutDetail,
+      "and it round-trips through the event encoder")
     report("truncation lands on rune boundaries and round-trips as UTF-8")
 
   block unrecoverable:
