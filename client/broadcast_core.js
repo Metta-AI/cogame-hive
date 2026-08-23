@@ -14,6 +14,7 @@
 
 (function () {
   var CELL = 8;
+  var ANT_PX = 30;   // ant sprite side in world px (3.75 cells)
 
   function hexToRgb(hex) {
     var h = String(hex || '#ffffff').replace('#', '');
@@ -42,6 +43,7 @@
     this.rock = null;
     this.colours = ['#f2c14e', '#4ecdc4', '#9fd356', '#e26db5'];
     this.art = {};
+    this._antTints = {};
     this.rockLayer = null;
     this.glow = document.createElement('canvas');
     this.glowCtx = this.glow.getContext('2d');
@@ -70,6 +72,7 @@
     this.rows = rows;
     this.rock = rockBytes;
     if (colours && colours.length === 4) this.colours = colours.slice();
+    this._antTints = {};
     this.glow.width = cols;
     this.glow.height = rows;
     this.canvas.width = cols * CELL;
@@ -217,6 +220,41 @@
     this.glowCtx.putImageData(image, 0, 0);
   };
 
+  // The ant sheet is rendered in neutral off-white plating so one sprite
+  // serves every nest: the colony hue is composited onto the opaque pixels
+  // once per (variant, colour) and cached. null colour = the untinted base.
+  HiveBoard.prototype.antSprite = function (name, colour) {
+    var base = this.art[name];
+    if (!base) return null;
+    if (!colour) return base;
+    var key = name + '|' + colour;
+    var hit = this._antTints[key];
+    if (hit) return hit;
+    var c = document.createElement('canvas');
+    c.width = base.width;
+    c.height = base.height;
+    var g = c.getContext('2d');
+    g.drawImage(base, 0, 0);
+    // Blend the plating toward the colony hue; the golden crumb (the one
+    // saturated-yellow region of the sheet) is left alone so a laden ant
+    // still reads as "carrying food" rather than "carrying a blob".
+    var rgb = hexToRgb(colour);
+    var img = g.getImageData(0, 0, c.width, c.height);
+    var d = img.data;
+    var k = 0.55;
+    for (var p = 0; p < d.length; p += 4) {
+      if (!d[p + 3]) continue;
+      var r = d[p], gg = d[p + 1], b = d[p + 2];
+      if (r > 150 && gg > 120 && b < 140 && r > b + 60) continue;
+      d[p] = r + (rgb[0] - r) * k;
+      d[p + 1] = gg + (rgb[1] - gg) * k;
+      d[p + 2] = b + (rgb[2] - b) * k;
+    }
+    g.putImageData(img, 0, 0);
+    this._antTints[key] = c;
+    return c;
+  };
+
   HiveBoard.prototype.ring = function (cx, cy, colour, frames, radius) {
     this.rings.push({ cx: cx, cy: cy, colour: colour, life: frames,
       max: frames, radius: radius || 18 });
@@ -280,17 +318,30 @@
       }
     }
 
-    // 6. ants. A 3px dot in the colony hue; a laden ant is 4px with a white
-    //    food pip. At 24fps with staggered activation the columns read as
-    //    continuous traffic.
+    // 6. ants. Nano-banana cog-ant sprites (scripts/art/split_ant_sheet.py)
+    //    drawn at ANT_PX world units, anchored at the feet, tinted to the
+    //    colony hue through a per-colony cached copy. A laden ant is the
+    //    variant hoisting the big golden crumb, drawn a little larger so the
+    //    crumb reads at board scale; a scout keeps the neutral off-white
+    //    plating (the old white pip); a held ant is ghosted.
     var ants = f.ants;
+    ctx.imageSmoothingEnabled = true;
     for (i = 0; i < f.antCount; i++) {
       var ax = ants[i * 4] * CELL + CELL / 2;
       var ay = ants[i * 4 + 1] * CELL + CELL / 2;
       var st = ants[i * 4 + 2];
       var colony = ants[i * 4 + 3];
       var col = this.colours[colony] || '#fff';
-      if (st === 2) {
+      var laden = st === 2;
+      var sprite = this.antSprite(laden ? 'ant_laden.png' : 'ant.png',
+        st === 1 ? null : col);
+      if (sprite) {
+        var side = laden ? ANT_PX * 1.3 : ANT_PX;
+        if (st === 3) ctx.globalAlpha = 0.45;
+        ctx.drawImage(sprite, ax - side / 2, ay + ANT_PX * 0.35 - side,
+          side, side);
+        ctx.globalAlpha = 1;
+      } else if (laden) {
         ctx.fillStyle = col;
         ctx.fillRect(ax - 2, ay - 2, 4, 4);
         ctx.fillStyle = '#fdf6e3';
@@ -303,6 +354,7 @@
         ctx.fillRect(ax - 1.5, ay - 1.5, 3, 3);
       }
     }
+    ctx.imageSmoothingEnabled = false;
 
     // 7. transient rings (deliveries, spawns, retirements)
     for (i = this.rings.length - 1; i >= 0; i--) {

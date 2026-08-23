@@ -16,8 +16,10 @@ Outputs (all under client/art/):
                         56px painted mound with a visible entrance, tinted to
                         its colony hue
   food_cache.png        64px painted seed pile
-  ant.png / ant_laden.png
-                        16px top-down ant sprites, tinted per colony at draw
+  (ant.png / ant_laden.png are NO LONGER written here: they are nano-banana
+   renders of the Softmax cog as a six-legged robot ant, split out of
+   scripts/art/source/ants_sheet.png by scripts/art/split_ant_sheet.py.
+   The procedural `ant()` below is kept only as a reference rig.)
   lockerroom.jpg        the pre-load curtain plate
 
   usage: python3 scripts/art/build_art.py [output-dir]
@@ -214,8 +216,7 @@ def main() -> None:
                          ("lime", "#9fd356"), ("magenta", "#e26db5")):
         nest(colour).save(OUT / f"nest_{name}.png")
     food_cache().save(OUT / "food_cache.png")
-    ant().save(OUT / "ant.png")
-    ant(laden=True).save(OUT / "ant_laden.png")
+    # ant.png / ant_laden.png: owned by split_ant_sheet.py (nano-banana).
     lockerroom().save(OUT / "lockerroom.jpg", quality=88)
     for path in sorted(OUT.iterdir()):
         print(f"{path}  {path.stat().st_size} bytes")
