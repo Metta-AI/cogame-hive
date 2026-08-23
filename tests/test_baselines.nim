@@ -3,7 +3,7 @@
 ## its compiled coefficients land inside their stated ranges. Plus the ladder
 ## assertion: the marcher out-delivers the driftling.
 
-import std/[json, unicode]
+import std/[json, strutils, unicode]
 import support/helpers
 
 proc randomView(rng: var Pcg, turn: int): JsonNode =

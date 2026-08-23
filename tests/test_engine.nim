@@ -217,9 +217,15 @@ proc main() =
     var match = newSim(testConfig(240, 5), meadow)
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
+    ## Three candidates; each decideAll issues two batches and each batch is
+    ## one verdict on one candidate, so the first call steps off haiku and
+    ## sonnet-4-6 without disabling anything.
     let first = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
     check(not client.disabled,
       "a 403 walks the bedrock ladder instead of writing the client off")
+    checkEqual(records.len, 2,
+      "four simultaneous 403s are ONE verdict on ONE candidate, so the " &
+      "three-rung ladder is not exhausted by a single batch")
     for seat in 0 ..< Colonies:
       checkEqual($first[seat].resolved.source, "fallback",
         "the turn still falls back so no colony is unactuated")

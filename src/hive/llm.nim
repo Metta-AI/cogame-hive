@@ -128,9 +128,18 @@ proc bedrockModelIds(): seq[string] =
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
   ]
 
-proc tryNextBedrockModel(client: LlmClient, why: string): bool =
-  if client.transport != ltBedrock or
-      client.bedrockModel + 1 >= client.bedrockModels.len:
+proc tryNextBedrockModel(client: LlmClient, why: string,
+    failedModel = -1): bool =
+  ## `failedModel` is the candidate the response that is complaining was sent
+  ## to. Every request in a turn's batch goes to the SAME model, so four
+  ## simultaneous 403s are one verdict on one candidate, not four steps down
+  ## a three-rung ladder: a response about a model somebody else has already
+  ## stepped off is answered "yes, handled" without moving again.
+  if client.transport != ltBedrock:
+    return false
+  if failedModel >= 0 and failedModel != client.bedrockModel:
+    return true
+  if client.bedrockModel + 1 >= client.bedrockModels.len:
     return false
   client.bedrockModel.inc
   echo "hive llm: ", client.bedrockModels[client.bedrockModel - 1],
@@ -213,7 +222,8 @@ proc requestFor(
 proc textOf(
   client: LlmClient,
   response: Response,
-  error, url: string
+  error, url: string,
+  failedModel = -1
 ): string =
   if error.len > 0:
     raise newException(HiveError, "llm transport: " & error)
@@ -224,7 +234,7 @@ proc textOf(
     ## profile is not enabled in this account - so the ladder is walked before
     ## the whole client is written off, whatever wording the body carries.
     ## Only when the last candidate has answered 403 is the client disabled.
-    if client.tryNextBedrockModel("http " & $response.code):
+    if client.tryNextBedrockModel("http " & $response.code, failedModel):
       raise newException(HiveError,
         "bedrock model rejected (" & $response.code & "): " & detail)
     client.disabled = true
@@ -232,7 +242,7 @@ proc textOf(
       "llm auth failed (" & $response.code & ") at " & url & ": " & detail)
   if response.code == 429:
     let detail = response.body[0 .. min(response.body.high, 300)]
-    discard client.tryNextBedrockModel("throttled")
+    discard client.tryNextBedrockModel("throttled", failedModel)
     raise newException(HiveError, "llm throttled (429): " & detail)
   if response.code < 200 or response.code >= 300:
     raise newException(HiveError, "anthropic error " & $response.code & ": " &
@@ -318,6 +328,9 @@ proc decideAll*(
           "lay_home, focus_weight and the keys recall, focus, note, say.")
       let request = client.requestFor(SystemPrompt, user)
       batch.post(request.url, request.headers, request.body, $seat)
+    ## Every request in this batch went to this candidate; a 403 from any of
+    ## them is one verdict on it.
+    let batchModel = client.bedrockModel
     let started = epochTime()
     let responses = client.sendBatch(batch, deadline)
     let latency = int((epochTime() - started) * 1000.0)
@@ -325,7 +338,7 @@ proc decideAll*(
     for position, seat in open:
       try:
         let text = client.textOf(responses[position].response,
-          responses[position].error, batch[position].url)
+          responses[position].error, batch[position].url, batchModel)
         let parsed = parseDoctrine(text, previous[seat], hasPrevious[seat])
         result[seat] = SeatOutcome(
           resolved: ResolvedDoctrine(doctrine: parsed, source: dsLlm,
