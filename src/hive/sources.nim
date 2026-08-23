@@ -95,15 +95,21 @@ proc liveCount*(sources: SourceSet): int =
       inc result
 
 proc orbitsAlive*(sources: SourceSet): int =
-  ## An orbit is four sources; a partially eaten orbit still counts while any
-  ## of its members is alive, so counting non-bonanza survivors in quarters is
-  ## wrong. Orbits are tracked by the count of live non-bonanza sources
-  ## rounded up - four to an orbit.
-  var live = 0
+  ## An orbit is four mirror-image sources spawned together, and it is ALIVE
+  ## while any one of its four members is alive. Exactly one orbit spawns per
+  ## spawn opportunity (`spawnSources`), so the spawn tick identifies the
+  ## orbit and the count is the number of distinct spawn ticks still
+  ## represented among the live non-bonanza sources.
+  ##
+  ## Counting survivors in quarters - ceil(live/4) - is NOT the same rule and
+  ## understates it: three orbits each half eaten is six live sources, which
+  ## rounds to two, and a fourth orbit would spawn while three are still
+  ## alive.
+  var seen: seq[int32]
   for item in sources.items:
-    if item.alive and not item.bonanza:
-      inc live
-  (live + Colonies - 1) div Colonies
+    if item.alive and not item.bonanza and item.spawnTick notin seen:
+      seen.add(item.spawnTick)
+  seen.len
 
 proc sourceAt*(sources: SourceSet, meadow: Field, cx, cy: int): int {.inline.} =
   if not meadow.onField(cx, cy): -1

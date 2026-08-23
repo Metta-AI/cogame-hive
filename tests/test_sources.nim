@@ -51,15 +51,62 @@ proc main() =
     report("the rejection loop keeps 3 cells of clearance and terminates")
 
   block orbitCap:
-    ## No orbit spawns while three are alive: run the real turn loop and count
-    ## live non-bonanza sources at every spawn opportunity.
+    ## No orbit spawns while maxOrbits are already alive. Run the real turn
+    ## loop and check the invariant at every spawn opportunity, before and
+    ## after the spawn.
     var quiet = testConfig(4800, 42)
     quiet.bonanzaTicks = @[]
     var match = newSim(quiet, meadow)
-    match.runEpisode(scriptedProvider(allMarcher()))
+    let provide = scriptedProvider(allMarcher())
+    var spawnsWhileFull = 0
+    while not match.finished:
+      if match.tick mod match.config.turnTicks == 0:
+        match.beginTurn()
+        match.installDoctrines(provide(match, match.turn))
+      if match.tick mod match.config.sourceSpawnPeriod == 0:
+        let before = match.sources.orbitsAlive()
+        let spawnedBefore = match.sources.spawned
+        check(before <= match.config.maxOrbits,
+          "orbits alive (" & $before & ") never exceeds maxOrbits")
+        match.stepTick()
+        let spawnedNow = match.sources.spawned - spawnedBefore
+        if before >= match.config.maxOrbits and spawnedNow > 0:
+          inc spawnsWhileFull
+      else:
+        match.stepTick()
+      if match.tick >= match.config.episodeTicks:
+        match.endMatch(erComplete, euFullTime)
     check(match.sources.spawned mod Colonies == 0,
       "sources always spawn four at a time")
-    report("orbits spawn four at a time and respect maxOrbits")
+    checkEqual(spawnsWhileFull, 0,
+      "no orbit ever spawned while maxOrbits were already alive")
+    report("no orbit spawns while maxOrbits are alive")
+
+  block aPartlyEatenOrbitHoldsItsSlot:
+    ## The rule the old ceil(live / 4) count got wrong. Three orbits with one
+    ## survivor each is THREE orbits alive, not (3 + 3) div 4 = 1, so no
+    ## fourth orbit may spawn. Row 44 of the meadow is entirely free floor.
+    var set = initSourceSet(meadow.cols, meadow.rows)
+    var indices: seq[int]
+    for orbit in 0 .. 2:
+      for member in 0 .. 3:
+        let cx = 40 + orbit * 4 + member
+        check(meadow.isFree(cx, 44), "the probe cell is free floor")
+        indices.add(set.addSource(meadow, cx, 44, 60, orbit * 240, 1440, false))
+    checkEqual(set.orbitsAlive(), 3, "three whole orbits are three orbits")
+    for orbit in 0 .. 2:
+      for member in 1 .. 3:
+        set.retire(meadow, indices[orbit * 4 + member])
+    checkEqual(set.liveCount(), 3, "one survivor left in each orbit")
+    checkEqual(set.orbitsAlive(), 3,
+      "three orbits with one survivor each are still THREE orbits alive")
+    set.retire(meadow, indices[0])
+    checkEqual(set.orbitsAlive(), 2, "killing an orbit outright frees a slot")
+    ## A bonanza is not an orbit and never occupies a slot.
+    discard set.addSource(meadow, 79, 43, 100, 1200, 900, true)
+    discard set.addSource(meadow, 80, 43, 100, 1200, 900, true)
+    checkEqual(set.orbitsAlive(), 2, "bonanzas do not count as orbits")
+    report("an orbit is alive while ANY of its four members is")
 
   block bonanzas:
     var config = testConfig(4800, 42)
