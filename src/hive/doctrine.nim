@@ -193,7 +193,7 @@ proc repairDoctrine*(
   if hasPrevious and previous.recall:
     result.recall = false
   readFocus(node{"focus"}, result)
-  result.focusWeight = readPercent(node{"focus_weight"}, 0)
+  result.focusWeight = readPercent(node{"focus_weight"}, base.focusWeight)
   if not result.hasFocus:
     result.focusWeight = 0
   result.note = truncateRunes(node{"note"}.getStr(), MaxNoteRunes)

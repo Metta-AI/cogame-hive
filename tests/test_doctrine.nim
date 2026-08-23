@@ -71,6 +71,20 @@ proc main() =
     checkEqual(turnSeven.scouts, 11, "a missing field keeps last turn's value")
     checkEqual(turnSeven.trailGain, 77, "…for every integer field")
     checkEqual(turnSeven.poach, 5, "…and the one that was sent is used")
+    ## focus_weight is "as scouts, default 0" in the note's repair table: a
+    ## missing one keeps LAST TURN'S value, not a literal 0. It only forces
+    ## to 0 when focus itself came out null.
+    previous.hasFocus = true
+    previous.focusBx = 4
+    previous.focusBy = 6
+    previous.focusWeight = 80
+    let keptWeight = parsed("{\"poach\": 5, \"focus\": [4, 6]}", previous, true)
+    checkEqual(keptWeight.focusWeight, 80,
+      "a missing focus_weight keeps last turn's value")
+    let zeroed = parsed("{\"poach\": 5, \"focus\": null}", previous, true)
+    checkEqual(zeroed.focusWeight, 0, "…but a null focus still forces it to 0")
+    let sent = parsed("{\"focus\": [4, 6], \"focus_weight\": 25}", previous, true)
+    checkEqual(sent.focusWeight, 25, "…and a sent focus_weight wins")
     report("missing fields fall back to the previous turn, then the default")
 
   block recallShapes:
