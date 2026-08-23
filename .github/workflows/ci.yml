@@ -308,7 +308,11 @@ jobs:
       - name: Load the bundle in a real browser
         run: |
           set -euo pipefail
-          replay="$(ls dist/smoke/*.replay dist/smoke/replay.json 2>/dev/null | head -1)"
+          # `|| true`: under `set -o pipefail` a non-matching glob makes ls
+          # exit 2 and the assignment would abort the step before the
+          # readable error below ever runs. This game's replay is JSON, so
+          # the *.replay half of the pattern never matches.
+          replay="$(ls dist/smoke/*.replay dist/smoke/replay.json 2>/dev/null | head -1 || true)"
           test -n "${replay}" || {
             echo "::error::docker-smoke uploaded no replay to dist/smoke"; ls -la dist/smoke || true; exit 1; }
           echo "loading ${replay} in dist/static-replay-viewer"
