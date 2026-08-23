@@ -90,6 +90,9 @@ proc secondsLeft*(match: Sim): float =
 proc endMatch*(match: Sim, reason: EndReason, rule: EndRule) =
   if match.finished:
     return
+  ## Anything picked up since the last 24-tick flush would otherwise never
+  ## be reported: the harvest records must sum to the units removed.
+  match.flushHarvest()
   match.finished = true
   match.reason = reason
   match.rule = rule

@@ -525,8 +525,9 @@ proc scanTrailWars(sim: Sim) =
         if sim.recording:
           sim.events.add(trailWar(sim.tick, bx, by, hot, strengths))
 
-proc flushHarvest(sim: Sim) =
-  ## Step 12.
+proc flushHarvest*(sim: Sim) =
+  ## Step 12. Also called once at the end of the match, so the units taken
+  ## in the ticks after the last 24-tick boundary are still reported.
   for bucket in sim.sources.buckets:
     if bucket.units == 0'i32:
       continue

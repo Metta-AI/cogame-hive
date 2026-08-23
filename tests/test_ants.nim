@@ -246,22 +246,34 @@ proc main() =
     report("recall puts an empty ant on the carrying kernel")
 
   block recallGathersTheColony:
-    ## The same rule through the real step: an empty colony parked eight cells
-    ## out with recall installed walks home and holds, inside one turn.
+    ## The same rule through the real step, and the case that actually bites:
+    ## a colony 34 cells from home with a strong spread (alphaHome = 300).
+    ## The searching kernel SUBTRACTS alphaHome * H_own, so it walks the ants
+    ## straight off the home trail; the carrying kernel adds betaHome * H_own
+    ## and walks them down it. Only the second gets them home.
     var quiet = testConfig(240, 9)
     quiet.maxOrbits = 0
     quiet.bonanzaTicks = @[]
     var match = newSim(quiet, meadow)
     let colony = 0
     let nest = meadow.nests[colony]
-    check(meadow.isFree(nest.cx + 8, nest.cy), "the muster cell is free floor")
+    let startX = nest.cx + 34
+    ## A straight home trail along the nest's own row, out to the muster.
+    for cx in nest.cx .. startX:
+      check(meadow.isFree(cx, nest.cy), "the corridor cell is free floor")
+      match.planes.deposit(colony, PlaneHome, cx, nest.cy, 4000,
+        quiet.pheromoneMax)
+    check(chebyshev(startX, nest.cy, nest.cx, nest.cy) > quiet.nestSenseCells,
+      "the muster is beyond the nest-sense radius, so only H can guide them")
     for index in 0 ..< quiet.antsPerColony:
       match.antState[colony * quiet.antsPerColony + index] =
-        Ant(cx: int32(nest.cx + 8), cy: int32(nest.cy), heading: 0,
+        Ant(cx: int32(startX), cy: int32(nest.cy), heading: 4,
           carrying: false, carriedFrom: -1)
     var resolved: array[Colonies, ResolvedDoctrine]
     for seat in 0 ..< Colonies:
       var doctrine = defaultDoctrine()
+      doctrine.spread = 100      ## alphaHome 300: repulsive under search
+      doctrine.trailGain = 100   ## betaHome 400: attractive under carry
       doctrine.recall = match.seatNest[seat] == colony
       resolved[seat] = ResolvedDoctrine(doctrine: doctrine, source: dsScripted)
     match.installDoctrines(resolved)
@@ -272,8 +284,8 @@ proc main() =
       if match.antState[colony * quiet.antsPerColony + index].held:
         inc held
     checkEqual(held, quiet.antsPerColony,
-      "every recalled ant reached its own pad and is holding")
-    report("a recalled colony musters at its nest inside one turn")
+      "every recalled ant rode the home trail back and is holding")
+    report("a recalled colony walks its home trail home inside one turn")
 
   block noFloatInTheStep:
     ## The determinism contract, enforced by grep. `-ffast-math` is banned and
