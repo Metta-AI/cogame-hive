@@ -445,9 +445,13 @@ proc runAnts(sim: Sim) =
       var raid = 0
       var victim = -1
       if sourceId >= 0 and sourceId < sim.sources.items.len:
+        ## "within raidRadius of a DIFFERENT colony's nest centre" - our own
+        ## nest is excluded from the search, so a cache 15 cells from home
+        ## and 18 from a rival still counts as lifted off their doorstep.
         victim = nearestNest(sim.meadow, int(sim.sources.items[sourceId].cx),
-          int(sim.sources.items[sourceId].cy), sim.config.raidRadius)
-        if victim >= 0 and victim != colony:
+          int(sim.sources.items[sourceId].cy), sim.config.raidRadius,
+          exclude = colony)
+        if victim >= 0:
           raid = 1
           sim.raidedUnits[colony].inc
           sim.raidedFromYou[victim].inc

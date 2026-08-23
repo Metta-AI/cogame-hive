@@ -163,12 +163,17 @@ proc drawOrbitCells*(
       return @cells
   @[]
 
-proc nearestNest*(meadow: Field, cx, cy, raidRadius: int): int =
+proc nearestNest*(meadow: Field, cx, cy, raidRadius: int, exclude = -1): int =
   ## The colony whose nest centre is within `raidRadius` Chebyshev cells, or
-  ## -1. Ties go to the lowest nest index.
+  ## -1. Ties go to the lowest nest index. `exclude` drops one colony from
+  ## the search, which is what the raid rule needs: a delivery is a raid when
+  ## the cell was inside a DIFFERENT colony's radius, and your own nest being
+  ## marginally closer does not make it not so.
   result = -1
   var best = raidRadius + 1
   for nest in 0 ..< Colonies:
+    if nest == exclude:
+      continue
     let distance = chebyshev(cx, cy, meadow.nests[nest].cx, meadow.nests[nest].cy)
     if distance <= raidRadius and distance < best:
       best = distance

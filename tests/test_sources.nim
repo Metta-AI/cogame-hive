@@ -182,5 +182,28 @@ proc main() =
         "source_gone carries a legal cause, got " & cause)
     report("harvest buckets flush every 24 ticks and sum exactly")
 
+  block raidRadiusNamesTheRivalNotTheNearest:
+    ## A delivery is a raid when the source cell was inside a DIFFERENT
+    ## colony's raidRadius. Consulting the NEAREST nest instead answers a
+    ## different question: if your own nest happens to be marginally closer,
+    ## the cell is still inside the rival's radius and the food still came
+    ## off their doorstep.
+    let mine = meadow.nests[0]
+    checkEqual(nearestNest(meadow, mine.cx + 1, mine.cy, 20), 0,
+      "a cell beside your own nest is inside your own radius")
+    checkEqual(nearestNest(meadow, mine.cx + 1, mine.cy, 20, exclude = 0), -1,
+      "...and inside nobody else's, so it is never a raid")
+    ## Nest 2 sits 63 cells below nest 0. A cell 30 below nest 0 is 33 from
+    ## nest 2: inside a 40-cell radius of BOTH, and nearer to nest 0.
+    let probeY = mine.cy + 30
+    checkEqual(chebyshev(mine.cx, probeY, mine.cx, mine.cy), 30, "30 from home")
+    checkEqual(chebyshev(mine.cx, probeY, meadow.nests[2].cx,
+      meadow.nests[2].cy), 33, "33 from the rival")
+    checkEqual(nearestNest(meadow, mine.cx, probeY, 40), 0,
+      "the NEAREST nest within 40 is your own")
+    checkEqual(nearestNest(meadow, mine.cx, probeY, 40, exclude = 0), 2,
+      "excluding your own names the rival whose radius the cell sits in")
+    report("the raid rule asks which RIVAL radius the cell is in")
+
 main()
 echo "test_sources: all checks passed"
