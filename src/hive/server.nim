@@ -121,7 +121,12 @@ proc splicedChrome(): string =
     "<script src=\"./wire_constants.js\"></script>")
   result = result.replace("<!-- CHROME_COMMON -->",
     "<script src=\"./chrome_common.js\"></script>")
+  ## Both scripts, in the Dockerfile's order: static_replay.js calls the
+  ## HiveReplayModule factory that hive_replay.js defines, so splicing only
+  ## the shell leaves the native page throwing a ReferenceError inside its
+  ## load handler - no data-replay-error, just a stuck curtain.
   result = result.replace("<!-- BROADCAST_CORE -->",
+    "<script src=\"./hive_replay.js\"></script>" &
     "<script src=\"./static_replay.js\"></script>")
 
 # ---- artifact writing -------------------------------------------------------

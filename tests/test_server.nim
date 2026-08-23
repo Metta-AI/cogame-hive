@@ -78,6 +78,12 @@ proc main() =
     check("wire_constants.js" in page.body,
       "the served page is spliced, not raw")
     check("chrome_common.js" in page.body, "chrome_common is spliced in")
+    check("hive_replay.js" in page.body,
+      "the wasm module is spliced in - static_replay.js calls the " &
+      "HiveReplayModule factory it defines")
+    check("static_replay.js" in page.body, "and so is the shell")
+    check(page.body.find("hive_replay.js") < page.body.find("static_replay.js"),
+      "in the same order as the static bundle: module before shell")
     child.terminate()
     discard child.waitForExit()
     report("replay mode serves /replay-data and a spliced /client/replay")
