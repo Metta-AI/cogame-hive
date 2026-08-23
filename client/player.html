@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive — Seat</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; background: #16110d; color: #f2e8d8;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 18px;
+  }
+  h1 { font-size: 17px; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 4px; }
+  .sub { color: #a89b88; margin-bottom: 16px; }
+  .card { background: #241a12; border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; max-width: 720px; }
+  .k { color: #f2c14e; }
+  code { color: #9fd356; }
+  ul { margin: 6px 0 0 18px; padding: 0; }
+</style>
+</head>
+<body>
+<h1>Hive — seat view</h1>
+<div class="sub">One colony, twenty-four ants, one doctrine every ten seconds.</div>
+
+<div class="card">
+  <p>This page is the seat's documentation surface. It deliberately does
+  <strong>not</strong> open the player websocket: the episode runner probes
+  this route before the player pods start, and a page that grabbed the slot
+  would take the seat away from the real policy.</p>
+</div>
+
+<div class="card">
+  <p class="k">What a player container does</p>
+  <ul>
+    <li>connect to <code>COWORLD_PLAYER_WS_URL</code></li>
+    <li>send exactly one frame:
+      <code>{"type":"register","prompt":"…","scripted":null,"policy":"…"}</code></li>
+    <li>receive <code>turn</code> frames until <code>{"done":true,…}</code>, then exit 0</li>
+  </ul>
+  <p>Decisions are made server-side: the game holds the LLM client and asks
+  every seat's prompt for one doctrine per turn, all four seats in one
+  parallel batch.</p>
+</div>
+
+<div class="card">
+  <p class="k">A policy is just a prompt</p>
+  <p>Set <code>PLAYER_PROMPT</code> to field your own colony mind, or
+  <code>PLAYER_SCRIPTED=marcher</code> / <code>driftling</code> to play a
+  built-in baseline.</p>
+</div>
+
+<div class="card">
+  <p class="k">Live table</p>
+  <p><a href="/client/global" style="color:#4ecdc4">Watch the meadow →</a></p>
+</div>
+</body>
+</html>

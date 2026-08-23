@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive — Meadow</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #16110d; color: #f2e8d8;
+         font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { display: flex; align-items: baseline; gap: 14px; padding: 10px 14px;
+           background: #241a12; }
+  h1 { font-size: 15px; letter-spacing: .18em; text-transform: uppercase; margin: 0; }
+  #clock { color: #a89b88; }
+  #bug { display: flex; gap: 14px; padding: 8px 14px; flex-wrap: wrap; }
+  .nb { display: flex; align-items: center; gap: 6px; }
+  .nb i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .nb b { font-size: 15px; }
+  .nb small { color: #a89b88; }
+  #wrap { padding: 0 14px 14px; }
+  canvas { width: 100%; max-width: 1280px; image-rendering: pixelated;
+           background: #2c3a26; border-radius: 3px; }
+  #feed { padding: 8px 14px; color: #a89b88; max-height: 12em; overflow: auto; }
+  #feed div { white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hive</h1>
+  <span id="clock">connecting…</span>
+</header>
+<div id="bug"></div>
+<div id="wrap"><canvas id="meadow" width="1280" height="704"></canvas></div>
+<div id="feed"></div>
+<script>
+(function () {
+  'use strict';
+  var CELL = 8;
+  var canvas = document.getElementById('meadow');
+  var ctx = canvas.getContext('2d');
+  var url = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
+    location.host + '/global';
+  var socket = new WebSocket(url);
+  var seen = 0;
+
+  socket.onopen = function () {
+    document.getElementById('clock').textContent = 'connected';
+  };
+  socket.onclose = function () {
+    document.getElementById('clock').textContent = 'disconnected';
+  };
+  socket.onmessage = function (event) {
+    var s;
+    try { s = JSON.parse(event.data); } catch (e) { return; }
+    if (s.type !== 'state') return;
+    render(s);
+  };
+
+  function render(s) {
+    document.getElementById('clock').textContent =
+      'tick ' + s.t + ' / ' + s.ticks + '  ·  turn ' + s.turn + '/' + s.turns +
+      (s.done ? '  ·  FINAL' : '');
+
+    var bug = document.getElementById('bug');
+    bug.innerHTML = '';
+    s.colonies.forEach(function (c) {
+      var el = document.createElement('div');
+      el.className = 'nb';
+      var dot = document.createElement('i');
+      dot.style.background = c.colour;
+      var name = document.createElement('small');
+      name.textContent = c.alias + (c.player ? ' · ' + c.player : '');
+      var num = document.createElement('b');
+      num.textContent = c.delivered;
+      el.appendChild(dot); el.appendChild(num); el.appendChild(name);
+      bug.appendChild(el);
+    });
+
+    ctx.fillStyle = '#2c3a26';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // rock, from the block digest the view already carries
+    ctx.fillStyle = '#4a4640';
+    (s.field.rock || []).forEach(function (row, by) {
+      for (var bx = 0; bx < row.length; bx++) {
+        if (row[bx] === '#') ctx.fillRect(bx * 8 * CELL, by * 8 * CELL, 8 * CELL, 8 * CELL);
+      }
+    });
+    s.colonies.forEach(function (c) {
+      ctx.fillStyle = c.colour;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect((c.cell[0] - 2) * CELL, (c.cell[1] - 2) * CELL, 5 * CELL, 5 * CELL);
+      ctx.globalAlpha = 1;
+    });
+    ctx.fillStyle = '#e8d07a';
+    (s.sources || []).forEach(function (src) {
+      ctx.beginPath();
+      ctx.arc(src.cell[0] * CELL + 4, src.cell[1] * CELL + 4,
+        3 + 5 * (src.amount / Math.max(1, src.spawn_amount)), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    var colours = s.colonies.slice().sort(function (a, b) { return a.nest - b.nest; })
+      .map(function (c) { return c.colour; });
+    (s.ants || []).forEach(function (a) {
+      ctx.fillStyle = a[2] === 2 ? '#fdf6e3' : (colours[a[3]] || '#fff');
+      ctx.fillRect(a[0] * CELL + 2, a[1] * CELL + 2, a[2] === 2 ? 4 : 3, a[2] === 2 ? 4 : 3);
+    });
+
+    var feed = document.getElementById('feed');
+    (s.events || []).slice(seen).forEach(function (e) {
+      if (e.type !== 'doctrine' && e.type !== 'raid' && e.type !== 'trail_war' &&
+          e.type !== 'source_spawn' && e.type !== 'fallback') return;
+      var line = document.createElement('div');
+      line.textContent = '[' + e.t + '] ' + e.type + ' ' +
+        (e.colony || '') + ' ' + (e.note || e.victim || e.kind || '');
+      feed.insertBefore(line, feed.firstChild);
+      while (feed.childNodes.length > 40) feed.removeChild(feed.lastChild);
+    });
+    seen = (s.events || []).length;
+  }
+})();
+</script>
+</body>
+</html>

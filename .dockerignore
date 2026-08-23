@@ -1,0 +1,6 @@
+.git
+.github
+dist
+replay-viewer/dist
+nimcache
+*.md

@@ -1,0 +1,29 @@
+{
+  "name": "meadow",
+  "cols": 160,
+  "rows": 88,
+  "cell_px": 8,
+  "rock": [
+    {"kind": "disc", "cx": 34, "cy": 22, "r": 5},
+    {"kind": "disc", "cx": 61, "cy": 13, "r": 4},
+    {"kind": "rect", "cx": 20, "cy": 33, "w": 14, "h": 3},
+    {"kind": "rect", "cx": 50, "cy": 34, "w": 3, "h": 7},
+    {"kind": "disc", "cx": 11, "cy": 30, "r": 3},
+    {"kind": "polygon", "points": [[64, 26], [74, 24], [76, 32], [62, 34]]},
+    {"kind": "rect", "cx": 41, "cy": 5, "w": 10, "h": 3},
+    {"kind": "disc", "cx": 25, "cy": 6, "r": 3},
+    {"kind": "rect", "cx": 4, "cy": 18, "w": 9, "h": 3},
+    {"kind": "disc", "cx": 71, "cy": 6, "r": 3},
+    {"kind": "polygon", "points": [[36, 38], [44, 37], [45, 41], [35, 42]]},
+    {"kind": "disc", "cx": 55, "cy": 24, "r": 3}
+  ],
+  "nests": [
+    {"id": "N0", "cell": [16, 12], "colour": "#f2c14e", "alias": "Amber"},
+    {"id": "N1", "cell": [143, 12], "colour": "#4ecdc4", "alias": "Teal"},
+    {"id": "N2", "cell": [16, 75], "colour": "#9fd356", "alias": "Lime"},
+    {"id": "N3", "cell": [143, 75], "colour": "#e26db5", "alias": "Magenta"}
+  ],
+  "nest_radius": 2,
+  "spawn_quadrant": [4, 4, 79, 43],
+  "bonanza_cells": [[79, 43], [80, 43], [79, 44], [80, 44]]
+}

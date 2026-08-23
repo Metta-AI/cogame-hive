@@ -1,0 +1,67 @@
+# Build the static replay viewer with the same pinned Nim and Bitworld
+# sources as the native game. The output is architecture-neutral WebAssembly
+# even though this reproducible toolchain container runs as linux/amd64.
+FROM emscripten/emsdk:4.0.15 AS replay-viewer-builder
+
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends ca-certificates curl git && \
+  rm -rf /var/lib/apt/lists/* && \
+  curl -fsSL \
+    -o /usr/local/bin/nimby \
+    https://github.com/treeform/nimby/releases/download/0.1.27/nimby-Linux-X64 && \
+  echo "3b3084394bd26b09f84a3f82389f075221c8784893238390939d71dd66ac9e8b  /usr/local/bin/nimby" | sha256sum -c - && \
+  chmod +x /usr/local/bin/nimby && \
+  nimby use 2.2.4
+
+ENV PATH="/root/.nimby/nim/bin:$PATH"
+
+WORKDIR /workspace/hive
+COPY . .
+# The wasm module only needs the Nim stdlib plus src/hive - no bitworld, no
+# mummy, no curly - so there is nothing to sync. Drop the host machine's
+# package paths before compiling.
+RUN rm -f nim.cfg && \
+  nim c --hints:off -d:emscripten replay-viewer/hive_replay.nim && \
+  nim r --hints:off --path:src tools/gen_wire_constants.nim \
+    > replay-viewer/dist/wire_constants.js && \
+  cp client/chrome_common.js replay-viewer/dist/chrome_common.js && \
+  cp client/broadcast_core.js replay-viewer/dist/broadcast_core.js && \
+  cp replay-viewer/static_replay.js replay-viewer/dist/static_replay.js && \
+  cp data/font.ttf replay-viewer/dist/font.ttf && \
+  mkdir -p replay-viewer/dist/art/walls && \
+  cp client/art/meadow_floor.jpg client/art/rock.png \
+     client/art/nest_amber.png client/art/nest_teal.png \
+     client/art/nest_lime.png client/art/nest_magenta.png \
+     client/art/food_cache.png client/art/ant.png client/art/ant_laden.png \
+     client/art/lockerroom.jpg \
+     replay-viewer/dist/art/ && \
+  cp client/art/walls/wall_h.jpg client/art/walls/wall_v.jpg \
+     replay-viewer/dist/art/walls/ && \
+  sed -e 's|<!-- WIRE_CONSTANTS -->|<script src="./wire_constants.js"></script>|' \
+      -e 's|<!-- CHROME_COMMON -->|<script src="./chrome_common.js"></script>|' \
+      -e 's|<!-- BROADCAST_CORE -->|<script src="./hive_replay.js"></script><script src="./static_replay.js"></script>|' \
+    client/replay_broadcast.html > replay-viewer/dist/index.html && \
+  rm -rf replay-viewer/dist/nimcache && \
+  test -f replay-viewer/dist/hive_replay.wasm && \
+  test -f replay-viewer/dist/hive_replay.js && \
+  test -f replay-viewer/dist/hive_replay.data && \
+  test -f replay-viewer/dist/index.html && \
+  test -s replay-viewer/dist/wire_constants.js && \
+  grep -q '^window.HIVE_WIRE={' replay-viewer/dist/wire_constants.js && \
+  grep -q 'wire_constants.js' replay-viewer/dist/index.html && \
+  test -s replay-viewer/dist/chrome_common.js && \
+  grep -q 'window.ChromeCommon' replay-viewer/dist/chrome_common.js && \
+  grep -q 'chrome_common.js' replay-viewer/dist/index.html && \
+  grep -q 'hive_replay.js' replay-viewer/dist/index.html && \
+  grep -q 'static_replay.js' replay-viewer/dist/index.html && \
+  grep -q 'coworld-replay' replay-viewer/dist/static_replay.js && \
+  grep -q "tell(\"ready\")" replay-viewer/dist/static_replay.js && \
+  test -f replay-viewer/dist/art/meadow_floor.jpg && \
+  test -f replay-viewer/dist/art/rock.png && \
+  test -f replay-viewer/dist/art/nest_amber.png && \
+  test -f replay-viewer/dist/art/nest_magenta.png && \
+  test -f replay-viewer/dist/art/food_cache.png && \
+  test -f replay-viewer/dist/art/ant.png && \
+  test -f replay-viewer/dist/art/ant_laden.png && \
+  test -f replay-viewer/dist/art/walls/wall_h.jpg && \
+  test -f replay-viewer/dist/font.ttf

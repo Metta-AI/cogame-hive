@@ -1,0 +1,549 @@
+{
+  "game": {
+    "name": "hive",
+    "owner": "daveey@softmax.com",
+    "description": "Four ant colonies foraging one meadow. Each seat is one policy driving twenty-four identical ants that see one cell around themselves, drop and smell two decaying pheromones, and carry food home. No messaging: coordination has to be stigmergic. Scored by your share of all food returned.",
+    "episode_timeout_minutes": 20,
+    "runnable": {
+      "image": "{{HIVE_IMAGE}}",
+      "run": [
+        "/bin/hive"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-hive/tree/main"
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "config_schema": {
+      "tokens": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "One auth token per seat."
+      },
+      "players": {
+        "type": "array",
+        "default": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "description": "Per-seat player names."
+      },
+      "seed": {
+        "type": "integer",
+        "default": 0,
+        "description": "Episode seed. Unpinned means randomized."
+      },
+      "num_agents": {
+        "type": "integer",
+        "default": 4,
+        "description": "Colonies. Hive seats exactly four."
+      },
+      "antsPerColony": {
+        "type": "integer",
+        "default": 24
+      },
+      "episodeTicks": {
+        "type": "integer",
+        "default": 4800
+      },
+      "turnTicks": {
+        "type": "integer",
+        "default": 240
+      },
+      "antStepTicks": {
+        "type": "integer",
+        "default": 2
+      },
+      "cellPx": {
+        "type": "integer",
+        "default": 8
+      },
+      "pheromoneMax": {
+        "type": "integer",
+        "default": 4000
+      },
+      "pheromoneFloor": {
+        "type": "integer",
+        "default": 4
+      },
+      "pheromoneDecayNum": {
+        "type": "integer",
+        "default": 248
+      },
+      "decayPeriodTicks": {
+        "type": "integer",
+        "default": 8
+      },
+      "nestSenseCells": {
+        "type": "integer",
+        "default": 12
+      },
+      "maxOrbits": {
+        "type": "integer",
+        "default": 3
+      },
+      "sourceSpawnPeriod": {
+        "type": "integer",
+        "default": 240
+      },
+      "sourceAmount": {
+        "type": "integer",
+        "default": 60
+      },
+      "sourceLifeTicks": {
+        "type": "integer",
+        "default": 1440
+      },
+      "minNestClearance": {
+        "type": "integer",
+        "default": 14
+      },
+      "bonanzaTicks": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        },
+        "default": [
+          1200,
+          3600
+        ]
+      },
+      "bonanzaAmount": {
+        "type": "integer",
+        "default": 100
+      },
+      "bonanzaLifeTicks": {
+        "type": "integer",
+        "default": 900
+      },
+      "raidRadius": {
+        "type": "integer",
+        "default": 20
+      },
+      "trailWarThreshold": {
+        "type": "integer",
+        "default": 800
+      },
+      "turnBudgetSeconds": {
+        "type": "number",
+        "default": 22
+      },
+      "wallClockBudgetSeconds": {
+        "type": "number",
+        "default": 660
+      },
+      "playerConnectTimeoutSeconds": {
+        "type": "number",
+        "default": 90
+      },
+      "fieldPath": {
+        "type": "string",
+        "default": "meadow"
+      },
+      "showPlayerLabels": {
+        "type": "boolean",
+        "default": true
+      },
+      "gameOverTicks": {
+        "type": "integer",
+        "default": 96
+      }
+    },
+    "results_schema": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "colours": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "nests": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        },
+        "policy_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "win": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "delivered": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "harvested": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "raided_units": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "raided_from_you": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "peak_food_trail": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "ants": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "recalls": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "turns_llm": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "fallback_turns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "fallback_causes": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "properties": {
+              "timeout": {
+                "type": "integer"
+              },
+              "parse_error": {
+                "type": "integer"
+              },
+              "transport_error": {
+                "type": "integer"
+              },
+              "no_credentials": {
+                "type": "integer"
+              },
+              "budget_guard": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "total_delivered": {
+          "type": "integer"
+        },
+        "sources_spawned": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "end_rule": {
+          "type": "string",
+          "enum": [
+            "full_time",
+            "wall_clock",
+            "sim_fault",
+            "host_error"
+          ]
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "final_tick": {
+          "type": "integer"
+        },
+        "final_turn": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "names",
+        "aliases",
+        "colours",
+        "nests",
+        "policy_kinds",
+        "scores",
+        "win",
+        "delivered",
+        "harvested",
+        "raided_units",
+        "raided_from_you",
+        "peak_food_trail",
+        "ants",
+        "recalls",
+        "turns_llm",
+        "fallback_turns",
+        "fallback_causes",
+        "total_delivered",
+        "sources_spawned",
+        "reason",
+        "end_rule",
+        "winner",
+        "final_tick",
+        "final_turn",
+        "seed"
+      ]
+    },
+    "protocols": {
+      "player": {
+        "type": "text",
+        "value": "# Hive — wire protocol\n\nTwo channels: the player websocket (`hive.player.v1`) and the spectator\nchannel (`hive.global.v1`, plus the static replay bundle). Both are JSON text\nframes. Replay bytes are strict UTF-8 JSON, `hive.replay.v1`.\n\n## Player channel — `hive.player.v1`\n\n`WS /player?slot=N&token=T`. A bad slot or token is **403**; a duplicate\nconnection on a live slot is **409**.\n\n### player → game (exactly one frame)\n\n```json\n{\"type\": \"register\",\n \"prompt\": \"<strategy text or empty>\",\n \"scripted\": \"marcher\" | \"driftling\" | null,\n \"policy\": \"<free label, <=48 runes>\"}\n```\n\n`src/hive_player.nim` reads `COWORLD_PLAYER_WS_URL`, `PLAYER_PROMPT`,\n`PLAYER_SCRIPTED` and `PLAYER_POLICY_LABEL`, sends that frame, then receives\nuntil `{\"done\": true, …}` and exits 0. A seat that never registers, or\nregisters with neither field, is treated as `scripted: \"marcher\"`.\n`PLAYER_SCRIPTED` parsing: `marcher` / `1` / `true` / `yes` → marcher,\n`driftling` → driftling, anything else → none. `prompt` over 4000 runes is\n**truncated** at the transport, not rejected, and is never written to the\nreplay or the results.\n\n**Decisions are made server-side.** The game holds the LLM client and asks\nevery seat's prompt for one doctrine per turn, all four seats in one parallel\nbatch. The player container is informational after registration.\n\n### game → player\n\n```json\n{\"type\": \"welcome\", \"protocol\": \"hive.player.v1\", \"slot\": 0,\n \"colony\": \"Amber\", \"colour\": \"#f2c14e\",\n \"turns\": 20, \"turn_ticks\": 240, \"ants\": 24}\n```\n\n```json\n{\"type\": \"turn\", \"turn\": 7, \"tick\": 1680, \"colony\": \"Amber\",\n \"view\": { … }, \"doctrine_source\": \"llm\"}\n```\n\n```json\n{\"done\": true, \"result\": { …the results document… }}\n```\n\n## The per-seat view\n\nBlocks are 8 × 8 cells, so the block grid is **20 × 11**; block `(bx, by)`\ncovers cells `cx ∈ [8bx, 8bx+7]`, `cy ∈ [8by, 8by+7]`.\n\n```json\n{\"turn\": 7, \"of\": 20, \"tick\": 1680, \"ticks_left\": 3120, \"seconds_left\": 130.0,\n \"you\": {\"colony\": \"Amber\", \"colour\": \"#f2c14e\", \"nest\": [16, 12],\n         \"nest_block\": [2, 1], \"ants\": 24, \"carrying\": 6, \"scouts\": 4,\n         \"at_nest\": 3, \"delivered\": 118, \"delivered_last_turn\": 21,\n         \"mean_range_cells\": 27, \"last_doctrine\": { … | null }},\n \"field\": {\"cols\": 160, \"rows\": 88, \"cell_px\": 8, \"blocks\": [20, 11],\n           \"block_cells\": 8, \"rock\": [\"....................\", … 11 rows … ]},\n \"trails\": {\"food\":  [\"00000000000000000000\", … 11 rows … ],\n            \"home\":  [\"01100000000000000000\", … 11 rows … ],\n            \"rival\": [\"....................\", … 11 rows … ]},\n \"sources\": [{\"id\": 12, \"block\": [9, 5], \"cell\": [76, 43], \"amount_seen\": 41,\n              \"seen_turn\": 6, \"near_nest\": null}],\n \"contacts\": [{\"colony\": \"Teal\", \"blocks\": [[9,5],[10,5]], \"ants\": 7}],\n \"scoreboard\": [{\"colony\": \"Amber\", \"delivered\": 118}, … 4 … ],\n \"sources_live_total\": 9}\n```\n\n- `field.rock[by][bx]` is `#` when more than half the block's cells are rock.\n- `trails.food` / `trails.home` are digits `0`–`9`:\n  `min(9, (meanBlockValue * 10) div (pheromoneMax + 1))` over **your own**\n  planes.\n- `trails.rival` is the same digit computed as `max` over the other three\n  colonies' `F` planes, **but only for blocks where one of your own ants stood\n  during the previous turn**. Every other block is `.`, meaning *no reading*,\n  not *no trail*. You learn about rivals by walking where they walked.\n- `sources[]` lists only sources one of your ants has been within one cell of.\n  `amount_seen` and `seen_turn` are as of the last sighting, never live.\n  `near_nest` names a colony when the source is within 20 cells of that\n  colony's nest centre.\n- `contacts[]` lists, per rival, the blocks where your ants shared a cell with\n  theirs during the previous turn.\n- `scoreboard[]` is **public**: every nest counter is visible to everyone,\n  always, in nest order.\n\n**Hidden from a seat:** the positions, headings and carrying state of\nindividual ants — its own included; rival ant positions; rival pheromone planes\noutside sensed blocks; rival `H` planes entirely; the live amount of any source\nit has not just seen; the existence of any source it has never seen; every\nrival's doctrine, `note`, `say` and prompt; the seat → nest permutation for any\nother seat; the episode seed; and the future.\n\n**Hidden from everyone, both in-game name spaces:** the real player names\nbehind the colony aliases. `Amber` / `Teal` / `Lime` / `Magenta` are the only\nnames any prompt, view or event body contains.\n\n## Doctrine schema\n\n| Field | Type | Legal values | Repair when violated |\n|---|---|---|---|\n| `scouts` | int | 0…100 | missing/non-numeric → previous turn's value, or 40 on turn 0; out of range → clamped |\n| `trail_gain` | int | 0…100 | as `scouts`, default 50 |\n| `poach` | int | 0…100 | as `scouts`, default 15 |\n| `spread` | int | 0…100 | as `scouts`, default 40 |\n| `lay_food` | int | 0…100 | as `scouts`, default 70 |\n| `lay_home` | int | 0…100 | as `scouts`, default 50 |\n| `recall` | bool | `true`/`false`; accepts `\"true\"`/`\"false\"`/`0`/`1` | → `false`. Forced `false` if the previous turn recalled |\n| `focus` | `[int,int]` or null | `bx ∈ 0…19`, `by ∈ 0…10` | out of range → clamped; wrong shape → `null` |\n| `focus_weight` | int | 0…100 | as `scouts`, default 0; forced 0 when `focus` is `null` |\n| `note` | string | ≤ 140 **runes** | truncated on a rune boundary |\n| `say` | string | ≤ 32 **runes** | truncated on a rune boundary |\n\nParsing is tolerant: markdown fences are stripped, the outermost balanced\n`{…}` is taken if the model prefixed prose, numeric strings are accepted for\nany integer field, `focus` may be `{\"bx\":…,\"by\":…}`, and percentages may be\nwritten `\"70%\"`. Only when no object carrying at least one recognised doctrine\nkey can be recovered does the retry, then the fallback, fire. **The resolved,\nrepaired, clamped doctrine is what is installed and what is recorded** — the\nreplay never depends on re-running the repair.\n\nThree further caps on strings that reach the replay: `register.policy`\n≤ 48 runes, any recorded error text (`fallback.detail`) ≤ 200 runes, and\n`register.prompt` ≤ 4000 runes at the transport. **Truncation is on rune\nboundaries, never bytes.**\n\n## Results document (closed schema)\n\nAll per-seat arrays are length 4 in **slot** order.\n\n```json\n{\"names\": [\"daveey\", \"daveey-1\", \"Baseline (1)\", \"Baseline (2)\"],\n \"aliases\": [\"Amber\", \"Magenta\", \"Teal\", \"Lime\"],\n \"colours\": [\"#f2c14e\", \"#e26db5\", \"#4ecdc4\", \"#9fd356\"],\n \"nests\": [[16,12], [143,75], [143,12], [16,75]],\n \"policy_kinds\": [\"llm\", \"llm\", \"scripted\", \"scripted\"],\n \"scores\": [0.31692, 0.28154, 0.22231, 0.17923],\n \"win\": [true, false, false, false],\n \"delivered\": [412, 366, 289, 233],\n \"harvested\": [415, 371, 292, 236],\n \"raided_units\": [18, 74, 5, 0],\n \"raided_from_you\": [61, 12, 20, 4],\n \"peak_food_trail\": [3980, 2440, 4000, 1180],\n \"ants\": [24, 24, 24, 24],\n \"recalls\": [1, 0, 2, 0],\n \"turns_llm\": [20, 19, 0, 0],\n \"fallback_turns\": [0, 1, 0, 0],\n \"fallback_causes\": [{\"timeout\": 0, \"parse_error\": 0, \"transport_error\": 0,\n                      \"no_credentials\": 0, \"budget_guard\": 0}, … 4 … ],\n \"total_delivered\": 1300,\n \"sources_spawned\": 76,\n \"reason\": \"complete\",\n \"end_rule\": \"full_time\",\n \"winner\": 0,\n \"final_tick\": 4800,\n \"final_turn\": 20,\n \"seed\": 679961}\n```\n\n`reason` is one of `complete` / `deadline` / `fault`; `end_rule` is one of\n`full_time` / `wall_clock` / `sim_fault` / `host_error`. `winner` is a slot\nindex `0…3` or `null`.\n\n## Spectator channel — `hive.global.v1`\n\n`WS /global` streams a JSON snapshot on every turn and on every connection:\n`{type, game, protocol, t, turn, ticks, turns, fps, speeds, field, colonies,\nants, sources, scoreboard, started, done, connected, events}`. Real player\nnames appear only in `colonies[].player`, and only when `showPlayerLabels` is\nset. `GET /client/global` is a real browser page over the same feed;\n`GET /client/player` is the seat's documentation page and never opens the\nplayer socket. `/healthz` and `/global` keep answering for a 20 s shutdown\ngrace after the artifacts are written.\n\n## Replay bytes — `hive.replay.v1`\n\nStrict UTF-8 JSON. The **input log is the doctrine stream**, because the ant\nkernel is a pure function of `(seed, field, doctrines)` — which is why the\nreplay is small and why the viewer can re-derive the pheromone field.\n\n```json\n{\"protocol\": \"hive.replay.v1\",\n \"format_version\": 1,\n \"game_version\": \"1\",\n \"seed\": 679961,\n \"config\": { …the resolved game config, tokens excluded… },\n \"field\": { …data/meadow.fieldspec.json inlined verbatim, pre-mirroring… },\n \"seat_nests\": [0, 3, 1, 2],\n \"names\": {\"players\": [...], \"aliases\": [...], \"policy_kinds\": [...],\n           \"colours\": [...]},\n \"ticks_per_second\": 24, \"turn_ticks\": 240, \"tick_count\": 4800,\n \"doctrines\": [{\"turn\": 0, \"seat\": 0, \"source\": \"llm\", \"latency_ms\": 4120,\n                \"scouts\": 55, …, \"note\": \"…\", \"say\": \"…\"}, … ],\n \"keyframes\": [{\"t\": 0, \"d\": 2947483111, \"del\": [0,0,0,0], \"car\": [0,0,0,0],\n                \"src\": [[3,76,43,60], … ]}, … every 24 ticks … ],\n \"ants_b64\": \"<base64 of keyframeCount x 96 x 3 bytes: (cx u8, cy u8,\n              state u8) per ant per keyframe, ants in global index order>\",\n \"events\": [ … ],\n \"results\": { … }}\n```\n\nAnt state codes: `0` searching forager, `1` searching scout, `2` carrying,\n`3` at nest, held by recall. `src` rows are `[id, cx, cy, amount]`.\n\n### Event vocabulary\n\nEvery record carries `t` (tick), and `turn` where meaningful.\n\n| `type` | Fields |\n|---|---|\n| `match_start` | `t`, `seed`, `field`, `colonies`, `ants_per_colony`, `episode_ticks` |\n| `turn_start` | `t`, `turn`, `delivered`, `sources_live` |\n| `doctrine` | `t`, `turn`, `seat`, `colony`, `source`, `latency_ms`, the nine doctrine fields, `note`, `say` |\n| `fallback` | `t`, `turn`, `seat`, `attempt`, `cause`, `detail` |\n| `budget_guard` | `t`, `turn`, `remaining_s` |\n| `recall` | `t`, `turn`, `colony`, `ants_recalled` |\n| `source_spawn` | `t`, `kind`, `orbit`, `sources`, `near` |\n| `source_gone` | `t`, `source`, `cell`, `cause`, `taken` |\n| `harvest` | `t`, `s`, `c`, `u` |\n| `deliver` | `t`, `c`, `n`, `s`, `r` |\n| `raid` | `t`, `colony`, `victim`, `source`, `units` |\n| `trail_war` | `t`, `block`, `colonies`, `strengths` |\n| `end` | `t`, `reason`, `end_rule`, `delivered`, `scores`, `winner` |\n\n## Runtime contract\n\n`bitworld/runtime`: `COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`,\n`COGAME_SAVE_REPLAY_URI`, `COGAME_LOAD_REPLAY_URI`,\n`COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI` and `COGAME_METRICS_URI` —\nthe last two `file://`-only and loudly rejected otherwise. The end-of-episode\nwrite order is: broadcast `done` to every seat with a 3 s per-seat deadline →\nwrite the replay → write the results.\n\nThe game container does **not** receive `COWORLD_TIMEOUT_SECONDS`; 1200 s is\nassumed. Every wait is bounded: two LLM attempt deadlines (14 s then 6 s), one\nper-turn budget of 22 s, `playerConnectTimeoutSeconds` on the connect wait, a\n3 s per-seat deadline on the final done-broadcast, and a 660 s engine stop.\n"
+      },
+      "global": {
+        "type": "text",
+        "value": "# Hive - spectator channel (hive.global.v1)\n\n`WS /global` streams one JSON snapshot per turn and one on every connection:\n\n```json\n{\"type\": \"state\", \"game\": \"hive\", \"protocol\": \"hive.global.v1\",\n \"t\": 1680, \"turn\": 7, \"ticks\": 4800, \"turns\": 20, \"fps\": 24,\n \"speeds\": [1,2,3,4,8,16],\n \"field\": {\"cols\": 160, \"rows\": 88, \"cell_px\": 8, \"blocks\": [20,11],\n           \"block_cells\": 8, \"rock\": [ ... 11 rows of 20 chars ... ]},\n \"colonies\": [{\"seat\": 0, \"nest\": 0, \"alias\": \"Amber\", \"colour\": \"#f2c14e\",\n               \"cell\": [16,12], \"player\": \"daveey\", \"delivered\": 118,\n               \"carrying\": 6, \"scouts\": 4, \"doctrine\": { ... },\n               \"doctrine_source\": \"llm\"}, ... 4 ... ],\n \"ants\": [[cx, cy, state, colony], ... 96 ... ],\n \"sources\": [{\"id\": 12, \"cell\": [76,43], \"amount\": 41, \"spawn_amount\": 60}],\n \"scoreboard\": [{\"colony\": \"Amber\", \"delivered\": 118}, ... ],\n \"started\": true, \"done\": false, \"connected\": [true,true,true,true],\n \"events\": [ ...the last 40 events... ]}\n```\n\nAnt state codes: 0 searching forager, 1 searching scout, 2 carrying, 3 held by recall.\n\nReal player names appear only in `colonies[].player`, and only when `showPlayerLabels` is set; every in-game surface sees the colony alias.\n\n`GET /client/global` is a real browser page over the same feed. `GET /client/player` is the seat's documentation page and deliberately never opens the player websocket. `/healthz` and `/global` keep answering for a 20 s shutdown grace after the artifacts are written.\n\nReplays are a STATIC wasm bundle, never a pod: the viewer re-runs the same integer sim from the recorded doctrine stream in the browser and verifies its own re-derivation against the u32 digest in every keyframe. It contacts nothing but the S3 URL it was given.\n"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "# hive\n\n**Four ant colonies foraging one meadow.** Each seat is one policy driving\ntwenty-four identical ants that see one cell around themselves, drop and smell\ntwo decaying pheromones, and carry food home. There is no combat, no chat, and\nno way to steer a single ant. The only levers a colony has are the kernel\nweights every ant runs and the heading ants leave the nest with — everything\nelse it does, it does by painting the ground.\n\nScored by food returned to the nest, **as a share of all food returned**, so\nthe game is exactly constant-sum across the four colonies: the only way to\nraise your score is to take food a rival did not.\n\n- Rules: [`docs/RULES.md`](docs/RULES.md)\n- Wire protocol: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)\n- Watch: <https://softmax.com/hive>\n\n## A policy is just a prompt\n\nEvery ten seconds of sim time a colony sets one **doctrine** — nine integers, a\ntarget block and two strings — and the deterministic ant kernel runs it for all\ntwenty-four bodies at 24 Hz. The LLM is the queen at 0.1 Hz; the kernel is the\ncolony at 24 Hz. Ninety-six bodies are driven by eighty LLM calls in a whole\nepisode.\n\n```json\n{\"scouts\": 15, \"trail_gain\": 78, \"poach\": 12, \"spread\": 32,\n \"lay_food\": 88, \"lay_home\": 52, \"recall\": false,\n \"focus\": [9, 5], \"focus_weight\": 70,\n \"note\": \"cache at (76,43) is fat and Teal has not found it; pump the road\",\n \"say\": \"west road, full pump\"}\n```\n\nTo field your own colony mind, reuse the image and set `PLAYER_PROMPT`:\n\n```bash\ncoworld upload-policy coworld-hive:latest --name my-hive \\\n  --run /bin/hive-player --secret-env PLAYER_PROMPT=\"<your strategy>\"\n```\n\n`PLAYER_SCRIPTED=marcher` or `PLAYER_SCRIPTED=driftling` plays a built-in\nbaseline instead — same image, same doctrine schema, no LLM.\n\n## What a spectator sees\n\nThe pheromone fields glow as two decaying overlay colours, so each colony's\nstrategy is literally painted on the ground: the food trail in the colony's hue\nbrightening as a road pays and dimming as it dies, the home trail a\ndesaturated layer underneath it. Ant flows read like traffic. Nest counters\npulse on every delivery. When two colonies' roads meet in the same 8 × 8 block\nthe contested block flashes a hatched two-colour overlay and the banner lane\nreads `TRAIL WAR — Amber vs Teal over block 9,5`. Twice a match a four-hundred\nunit cache lands dead centre and everybody goes for it.\n\nThe replay is a **static wasm bundle**: the viewer re-runs the same integer sim\nfrom the recorded doctrine stream in the browser and verifies its own\nre-derivation against the digest in every keyframe. Nothing but the S3 URL is\ncontacted.\n\n## Layout\n\n```\nsrc/hive.nim              entrypoint (live server / replay server)\nsrc/hive_player.nim       the player: register, listen, exit\nsrc/hive/                 types, config, field, pheromones, ants, sources,\n                          sim, rules, doctrine, baselines, llm, state, roster,\n                          events, labels, broadcast, global, render, replay,\n                          server\nreplay-viewer/            hive_replay.nim (the wasm module) + the shell\nclient/                   the broadcast chrome, the board renderer, the art\ndata/meadow.fieldspec.json  the one authored field\nscripts/art/              the committed art generators\ntests/                    16 standalone test programs + tests/support\ntools/                    the CI smoke, the viewer build hook, wire constants\n```\n\n## Build and run\n\nCI is the harness — `.github/workflows/ci.yml` runs every `tests/*.nim` twice\n(debug and `-d:release`), builds the image and plays one real episode in raw\nDocker from the certification fixture, and builds the static replay bundle.\n\nLocally:\n\n```bash\nnimby use 2.2.4 && nimby --global sync nimby.lock\nnim c -d:release --out:hive src/hive.nim\nnim c -d:release --out:hive-player src/hive_player.nim\ndocker compose build\n./tools/ci/docker_smoke.sh coworld-hive:latest\n./tools/build_replay_viewer.sh \"$PWD/dist/static-replay-viewer\"\n```\n\n## Determinism\n\nSame seed + same resolved doctrine stream ⇒ the same u32 state digest at every\nkeyframe, in the native build *and* in the emscripten build. The whole step is\ninteger — no float arithmetic and no libm call appears in the sim, and a\nsource-grep test enforces it. That is what lets the browser re-derive 220 KiB\nof pheromone field per frame from a 240 KB replay and prove it got the same\nmatch.\n"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "# Hive — rules\n\nFour ant colonies forage one shared meadow. Each seat is **one policy driving\ntwenty-four identical ants**. An ant sees one cell in every direction and\nnothing else. There is no combat, no chat, and no way for a colony's policy to\nsteer an individual ant. Everything else the colony does, it does by painting\nthe ground.\n\n## The field\n\n- **Grid.** 160 × 88 cells, 8 px a cell, so the board is 1280 × 704 px. Cell\n  `(cx, cy)` occupies pixels `[cx*8, cx*8+7] × [cy*8, cy*8+7]`; origin\n  top-left, +x right, +y down.\n- **Rock.** Static impassable cells, authored in `data/meadow.fieldspec.json`\n  as rectangles, discs and polygons. The loader ORs in all three mirror\n  images, so the mask is invariant under `cx → 159 − cx` and `cy → 87 − cy`.\n  Rock blocks movement and holds no pheromone. Rock is **not secret** — the\n  terrain is in every seat's observation, always.\n- **Nests.** Four, one per corner, each a 5 × 5 cell pad (Chebyshev radius 2\n  around its centre):\n\n  | Nest | Centre cell | Colony | Hex |\n  |---|---|---|---|\n  | `N0` | (16, 12) | Amber | `#f2c14e` |\n  | `N1` | (143, 12) | Teal | `#4ecdc4` |\n  | `N2` | (16, 75) | Lime | `#9fd356` |\n  | `N3` | (143, 75) | Magenta | `#e26db5` |\n\n  The four centres are the orbit of (16, 12) under both mirrors, so the set is\n  exactly symmetric: every colony has one horizontal neighbour, one vertical\n  neighbour, one diagonal and one equidistant centre. **Colour is a property of\n  the nest, never of the seat** — the seat → nest assignment is a permutation\n  of `[0,1,2,3]` drawn from the episode seed and re-drawn every episode.\n- **Ants.** 24 a colony, 96 on the field. An ant has a cell, one of eight\n  headings (`0 = E`, counter-clockwise in 45° steps), a carrying flag and, when\n  carrying, the id of the source the unit came from. Ants never die, never\n  fight and **never block each other**; only rock and the field edge block\n  movement. An ant acts once every 2 ticks: ant `g = nestIndex * 24 + antIndex`\n  acts on tick `t` iff `(t + g) mod 2 == 0`.\n- **Pheromones.** Two planes a colony — `F` (food trail) and `H` (home trail) —\n  a `uint16` a cell, `0 … 4000`. Every 8 ticks every non-zero cell becomes\n  `p ← (p * 248) shr 8`, and anything under 4 becomes 0. Half-life ≈ 175 ticks\n  ≈ 7.3 s: an unmaintained trail is gone in about half a minute and a trail\n  that pays keeps itself alive.\n- **Food.** A source is `{id, cell, amount, spawn_tick, life_ticks}`.\n  - **Orbits.** Every 240 ticks, if fewer than 3 orbits are alive, one new\n    orbit spawns: a cell drawn inside the top-left quadrant (rejected unless it\n    is free floor at Chebyshev distance ≥ 14 from every nest centre and ≥ 3\n    from every live source) plus its three mirror images. Each of the four\n    sources carries 60 units and lives 1440 ticks.\n  - **Bonanzas.** At ticks 1200 and 3600, four sources spawn on the exact\n    centre block — (79, 43), (80, 43), (79, 44), (80, 44) — each with 100 units\n    and a 900-tick life. Equidistant from all four nests, and the reason the\n    middle of the meadow becomes a battlefield twice per match.\n\n## The ant kernel\n\nAn acting ant at cell `c` with heading `d` considers exactly **three**\ncandidates: forward-left `d+7`, forward `d`, forward-right `d+1`. It cannot\nreverse except on a pickup or a stall. Candidates that are rock or off-field\nare discarded; if all three are, the ant turns 90° and does not move.\n\nFor a **searching** ant, candidate `k` scores, in `int32`:\n\n```\nscore(k) = ((alphaFood  * F_own[k])      shr 4)\n         + ((alphaRival * F_rivalMax[k]) shr 4)\n         - ((alphaHome  * H_own[k])      shr 4)\n         + (if k is the forward cell: alphaFwd else 0)\n         + 900 * foodAdjacent(k)\n         + rnd(0 .. alphaNoise - 1)\n```\n\n`F_rivalMax[k]` is the largest food-trail value among the other three colonies\nat `k` — an ant literally smells a rival's road under its feet.\n`foodAdjacent(k)` is 1 when a live source with `amount > 0` sits in `k` or one\nof `k`'s eight neighbours.\n\nFor a **carrying** ant:\n\n```\nscore(k) = ((betaHome * H_own[k]) shr 4)\n         + (if within 12 cells of the nest AND k reduces the Chebyshev\n            distance to it: 1200 else 0)\n         + (if k is the forward cell: 260 else 0)\n         + rnd(0 .. 31)\n```\n\n**Path integration is deliberately short-ranged.** Beyond 12 cells a laden ant\nhas no idea where home is and must ride the home trail its nestmates laid.\nThat is what makes `H` load-bearing rather than decorative.\n\nHighest score wins; ties break in candidate order **left, forward, right**.\n\n## The doctrine\n\nEvery 240 ticks (10 s) each colony sets one doctrine, and the kernel runs it\nfor all 24 bodies at 24 Hz:\n\n```json\n{\"scouts\": 15, \"trail_gain\": 78, \"poach\": 12, \"spread\": 32,\n \"lay_food\": 88, \"lay_home\": 52, \"recall\": false,\n \"focus\": [9, 5], \"focus_weight\": 70,\n \"note\": \"<=140 runes\", \"say\": \"<=32 runes\"}\n```\n\nIt compiles to the kernel's integer coefficients by this exact table:\n\n| Coefficient | From the doctrine | Range |\n|---|---|---|\n| `alphaFood` | `trail_gain * 4` | 0 … 400 |\n| `alphaRival` | `poach * 3` | 0 … 300 |\n| `alphaHome` | `spread * 3` | 0 … 300 |\n| `alphaFwd` | `320 - spread * 2` | 320 … 120 |\n| `alphaNoise` | `40 + (100 - trail_gain) * 4` | 40 … 440 |\n| `betaHome` | `200 + trail_gain * 2` | 200 … 400 |\n| `layFood` | `40 + lay_food * 3` | 40 … 340 |\n| `layHome` | `20 + lay_home * 2` | 20 … 220 |\n| `scoutCount` | `(scouts * 24 + 50) div 100` | 0 … 24 |\n\nThe first `scoutCount` ants by index are **scouts** for that turn: they run the\nsame kernel with `alphaFood div 4`, `alphaRival = 0` and doubled noise, so they\nignore the roads and wander. Their deposits are unchanged, so the instant a\nscout finds food it becomes a carrier and lays a full-strength trail home. That\nis the recruitment moment.\n\n`recall: true` makes every ant drop its road, walk home on the carrying kernel\nand hold in the nest pad until a turn arrives with `recall: false`. It may not\nrun two turns in a row.\n\n`focus` is the only colony-level steering that exists, and it acts at the nest\nmouth on a departing body: a released ant takes the bearing toward the focus\nblock with probability `focus_weight` percent, else a uniform draw over the\neight headings.\n\n## Resolution order (exact, per tick, no exceptions)\n\n1. **Turn clock.** `turn = t div 240`. On a turn boundary: install the\n   doctrines, clear each colony's sensed block map, roll\n   `delivered_last_turn`, emit `turn_start` and one `doctrine` per seat.\n2. **Source lifecycle.** Spawn an orbit / the bonanzas, then retire (ascending\n   source id) every source at zero or past its life.\n3. **Activation set.** Ant `g` acts iff `(t + g) mod 2 == 0`. Steps 4–9 run in\n   ant order.\n4. **Recall modifier.**\n5. **Deposit.** Carrying → `F_own += layFood`; searching → `H_own += layHome`,\n   saturating at 4000. Also stamps `sensed[colony][block]`.\n6. **Pickup.** Own cell, then N, NE, E, SE, S, SW, W, NW, lowest live source id\n   wins: one unit, `carrying = true`, about-face, skip the move.\n7. **Delivery.** A carrying ant inside its **own** pad delivers one unit. A\n   rival's pad does nothing.\n8. **Move.** The kernel above.\n9. **Release.** A delivering ant, and any non-carrying ant standing in its own\n   pad that did not move, gets a new heading.\n10. **Trail-war scan** every 48 ticks.\n11. **Pheromone decay** every 8 ticks.\n12. **Harvest flush** every 24 ticks.\n13. **Keyframe** every 24 ticks (tick, the 96 ants, the counters, the live\n    sources, the u32 state digest).\n14. **Turn snapshot** in memory, so a backward seek in the viewer replays at\n    most one turn.\n15. **End check.**\n\n## Scoring\n\n```\ndelivered[s]  = units this seat's ants carried into their own nest pad\ntotal         = delivered[0] + delivered[1] + delivered[2] + delivered[3]\nscore[s]      = delivered[s] / total     if total > 0\nscore[s]      = 0.25                     if total == 0\n```\n\n**Higher is better.** `score ∈ [0, 1]` and `sum(score) == 1.0` exactly for\nevery legal outcome — the game is exactly constant-sum across the four\ncolonies, so the only way to raise your score is to take food a rival did not.\n`winner` is the slot with the unique maximum, or `null` on a tie.\n\n## End conditions\n\n| `reason` | `end_rule` | When |\n|---|---|---|\n| `complete` | `full_time` | All 4800 ticks simulated. The normal ending. |\n| `deadline` | `wall_clock` | The 660 s engine stop tripped first. Scores the counters as they stand; shares still sum to 1.0. |\n| `fault` | `sim_fault` | An invariant guard tripped. All scores 0.25, `winner: null`. |\n| `fault` | `host_error` | An unexpected server-side exception. Same treatment. |\n\nA seat that never connects does **not** end the episode: its colony is driven\nby the `marcher` baseline for the whole match, the no-show is reported to\n`COGAME_PLAYER_FAILURE_URI`, and the match plays to full time.\n\n## Determinism\n\nSame seed + same resolved doctrine stream ⇒ the same digest at every keyframe,\nin the native build *and* in the emscripten build. It holds because the whole\nstep is integer: no `sin`, `cos`, `tan`, `atan`, `exp`, `ln`, `pow`, `sqrt`,\n`hypot`, `fmod` or float arithmetic of any kind appears in the sim step, and\n`-ffast-math` is banned. A source-grep test enforces both.\n"
+          }
+        },
+        {
+          "id": "protocol.md",
+          "title": "Wire protocol",
+          "content": {
+            "type": "text",
+            "value": "# Hive — wire protocol\n\nTwo channels: the player websocket (`hive.player.v1`) and the spectator\nchannel (`hive.global.v1`, plus the static replay bundle). Both are JSON text\nframes. Replay bytes are strict UTF-8 JSON, `hive.replay.v1`.\n\n## Player channel — `hive.player.v1`\n\n`WS /player?slot=N&token=T`. A bad slot or token is **403**; a duplicate\nconnection on a live slot is **409**.\n\n### player → game (exactly one frame)\n\n```json\n{\"type\": \"register\",\n \"prompt\": \"<strategy text or empty>\",\n \"scripted\": \"marcher\" | \"driftling\" | null,\n \"policy\": \"<free label, <=48 runes>\"}\n```\n\n`src/hive_player.nim` reads `COWORLD_PLAYER_WS_URL`, `PLAYER_PROMPT`,\n`PLAYER_SCRIPTED` and `PLAYER_POLICY_LABEL`, sends that frame, then receives\nuntil `{\"done\": true, …}` and exits 0. A seat that never registers, or\nregisters with neither field, is treated as `scripted: \"marcher\"`.\n`PLAYER_SCRIPTED` parsing: `marcher` / `1` / `true` / `yes` → marcher,\n`driftling` → driftling, anything else → none. `prompt` over 4000 runes is\n**truncated** at the transport, not rejected, and is never written to the\nreplay or the results.\n\n**Decisions are made server-side.** The game holds the LLM client and asks\nevery seat's prompt for one doctrine per turn, all four seats in one parallel\nbatch. The player container is informational after registration.\n\n### game → player\n\n```json\n{\"type\": \"welcome\", \"protocol\": \"hive.player.v1\", \"slot\": 0,\n \"colony\": \"Amber\", \"colour\": \"#f2c14e\",\n \"turns\": 20, \"turn_ticks\": 240, \"ants\": 24}\n```\n\n```json\n{\"type\": \"turn\", \"turn\": 7, \"tick\": 1680, \"colony\": \"Amber\",\n \"view\": { … }, \"doctrine_source\": \"llm\"}\n```\n\n```json\n{\"done\": true, \"result\": { …the results document… }}\n```\n\n## The per-seat view\n\nBlocks are 8 × 8 cells, so the block grid is **20 × 11**; block `(bx, by)`\ncovers cells `cx ∈ [8bx, 8bx+7]`, `cy ∈ [8by, 8by+7]`.\n\n```json\n{\"turn\": 7, \"of\": 20, \"tick\": 1680, \"ticks_left\": 3120, \"seconds_left\": 130.0,\n \"you\": {\"colony\": \"Amber\", \"colour\": \"#f2c14e\", \"nest\": [16, 12],\n         \"nest_block\": [2, 1], \"ants\": 24, \"carrying\": 6, \"scouts\": 4,\n         \"at_nest\": 3, \"delivered\": 118, \"delivered_last_turn\": 21,\n         \"mean_range_cells\": 27, \"last_doctrine\": { … | null }},\n \"field\": {\"cols\": 160, \"rows\": 88, \"cell_px\": 8, \"blocks\": [20, 11],\n           \"block_cells\": 8, \"rock\": [\"....................\", … 11 rows … ]},\n \"trails\": {\"food\":  [\"00000000000000000000\", … 11 rows … ],\n            \"home\":  [\"01100000000000000000\", … 11 rows … ],\n            \"rival\": [\"....................\", … 11 rows … ]},\n \"sources\": [{\"id\": 12, \"block\": [9, 5], \"cell\": [76, 43], \"amount_seen\": 41,\n              \"seen_turn\": 6, \"near_nest\": null}],\n \"contacts\": [{\"colony\": \"Teal\", \"blocks\": [[9,5],[10,5]], \"ants\": 7}],\n \"scoreboard\": [{\"colony\": \"Amber\", \"delivered\": 118}, … 4 … ],\n \"sources_live_total\": 9}\n```\n\n- `field.rock[by][bx]` is `#` when more than half the block's cells are rock.\n- `trails.food` / `trails.home` are digits `0`–`9`:\n  `min(9, (meanBlockValue * 10) div (pheromoneMax + 1))` over **your own**\n  planes.\n- `trails.rival` is the same digit computed as `max` over the other three\n  colonies' `F` planes, **but only for blocks where one of your own ants stood\n  during the previous turn**. Every other block is `.`, meaning *no reading*,\n  not *no trail*. You learn about rivals by walking where they walked.\n- `sources[]` lists only sources one of your ants has been within one cell of.\n  `amount_seen` and `seen_turn` are as of the last sighting, never live.\n  `near_nest` names a colony when the source is within 20 cells of that\n  colony's nest centre.\n- `contacts[]` lists, per rival, the blocks where your ants shared a cell with\n  theirs during the previous turn.\n- `scoreboard[]` is **public**: every nest counter is visible to everyone,\n  always, in nest order.\n\n**Hidden from a seat:** the positions, headings and carrying state of\nindividual ants — its own included; rival ant positions; rival pheromone planes\noutside sensed blocks; rival `H` planes entirely; the live amount of any source\nit has not just seen; the existence of any source it has never seen; every\nrival's doctrine, `note`, `say` and prompt; the seat → nest permutation for any\nother seat; the episode seed; and the future.\n\n**Hidden from everyone, both in-game name spaces:** the real player names\nbehind the colony aliases. `Amber` / `Teal` / `Lime` / `Magenta` are the only\nnames any prompt, view or event body contains.\n\n## Doctrine schema\n\n| Field | Type | Legal values | Repair when violated |\n|---|---|---|---|\n| `scouts` | int | 0…100 | missing/non-numeric → previous turn's value, or 40 on turn 0; out of range → clamped |\n| `trail_gain` | int | 0…100 | as `scouts`, default 50 |\n| `poach` | int | 0…100 | as `scouts`, default 15 |\n| `spread` | int | 0…100 | as `scouts`, default 40 |\n| `lay_food` | int | 0…100 | as `scouts`, default 70 |\n| `lay_home` | int | 0…100 | as `scouts`, default 50 |\n| `recall` | bool | `true`/`false`; accepts `\"true\"`/`\"false\"`/`0`/`1` | → `false`. Forced `false` if the previous turn recalled |\n| `focus` | `[int,int]` or null | `bx ∈ 0…19`, `by ∈ 0…10` | out of range → clamped; wrong shape → `null` |\n| `focus_weight` | int | 0…100 | as `scouts`, default 0; forced 0 when `focus` is `null` |\n| `note` | string | ≤ 140 **runes** | truncated on a rune boundary |\n| `say` | string | ≤ 32 **runes** | truncated on a rune boundary |\n\nParsing is tolerant: markdown fences are stripped, the outermost balanced\n`{…}` is taken if the model prefixed prose, numeric strings are accepted for\nany integer field, `focus` may be `{\"bx\":…,\"by\":…}`, and percentages may be\nwritten `\"70%\"`. Only when no object carrying at least one recognised doctrine\nkey can be recovered does the retry, then the fallback, fire. **The resolved,\nrepaired, clamped doctrine is what is installed and what is recorded** — the\nreplay never depends on re-running the repair.\n\nThree further caps on strings that reach the replay: `register.policy`\n≤ 48 runes, any recorded error text (`fallback.detail`) ≤ 200 runes, and\n`register.prompt` ≤ 4000 runes at the transport. **Truncation is on rune\nboundaries, never bytes.**\n\n## Results document (closed schema)\n\nAll per-seat arrays are length 4 in **slot** order.\n\n```json\n{\"names\": [\"daveey\", \"daveey-1\", \"Baseline (1)\", \"Baseline (2)\"],\n \"aliases\": [\"Amber\", \"Magenta\", \"Teal\", \"Lime\"],\n \"colours\": [\"#f2c14e\", \"#e26db5\", \"#4ecdc4\", \"#9fd356\"],\n \"nests\": [[16,12], [143,75], [143,12], [16,75]],\n \"policy_kinds\": [\"llm\", \"llm\", \"scripted\", \"scripted\"],\n \"scores\": [0.31692, 0.28154, 0.22231, 0.17923],\n \"win\": [true, false, false, false],\n \"delivered\": [412, 366, 289, 233],\n \"harvested\": [415, 371, 292, 236],\n \"raided_units\": [18, 74, 5, 0],\n \"raided_from_you\": [61, 12, 20, 4],\n \"peak_food_trail\": [3980, 2440, 4000, 1180],\n \"ants\": [24, 24, 24, 24],\n \"recalls\": [1, 0, 2, 0],\n \"turns_llm\": [20, 19, 0, 0],\n \"fallback_turns\": [0, 1, 0, 0],\n \"fallback_causes\": [{\"timeout\": 0, \"parse_error\": 0, \"transport_error\": 0,\n                      \"no_credentials\": 0, \"budget_guard\": 0}, … 4 … ],\n \"total_delivered\": 1300,\n \"sources_spawned\": 76,\n \"reason\": \"complete\",\n \"end_rule\": \"full_time\",\n \"winner\": 0,\n \"final_tick\": 4800,\n \"final_turn\": 20,\n \"seed\": 679961}\n```\n\n`reason` is one of `complete` / `deadline` / `fault`; `end_rule` is one of\n`full_time` / `wall_clock` / `sim_fault` / `host_error`. `winner` is a slot\nindex `0…3` or `null`.\n\n## Spectator channel — `hive.global.v1`\n\n`WS /global` streams a JSON snapshot on every turn and on every connection:\n`{type, game, protocol, t, turn, ticks, turns, fps, speeds, field, colonies,\nants, sources, scoreboard, started, done, connected, events}`. Real player\nnames appear only in `colonies[].player`, and only when `showPlayerLabels` is\nset. `GET /client/global` is a real browser page over the same feed;\n`GET /client/player` is the seat's documentation page and never opens the\nplayer socket. `/healthz` and `/global` keep answering for a 20 s shutdown\ngrace after the artifacts are written.\n\n## Replay bytes — `hive.replay.v1`\n\nStrict UTF-8 JSON. The **input log is the doctrine stream**, because the ant\nkernel is a pure function of `(seed, field, doctrines)` — which is why the\nreplay is small and why the viewer can re-derive the pheromone field.\n\n```json\n{\"protocol\": \"hive.replay.v1\",\n \"format_version\": 1,\n \"game_version\": \"1\",\n \"seed\": 679961,\n \"config\": { …the resolved game config, tokens excluded… },\n \"field\": { …data/meadow.fieldspec.json inlined verbatim, pre-mirroring… },\n \"seat_nests\": [0, 3, 1, 2],\n \"names\": {\"players\": [...], \"aliases\": [...], \"policy_kinds\": [...],\n           \"colours\": [...]},\n \"ticks_per_second\": 24, \"turn_ticks\": 240, \"tick_count\": 4800,\n \"doctrines\": [{\"turn\": 0, \"seat\": 0, \"source\": \"llm\", \"latency_ms\": 4120,\n                \"scouts\": 55, …, \"note\": \"…\", \"say\": \"…\"}, … ],\n \"keyframes\": [{\"t\": 0, \"d\": 2947483111, \"del\": [0,0,0,0], \"car\": [0,0,0,0],\n                \"src\": [[3,76,43,60], … ]}, … every 24 ticks … ],\n \"ants_b64\": \"<base64 of keyframeCount x 96 x 3 bytes: (cx u8, cy u8,\n              state u8) per ant per keyframe, ants in global index order>\",\n \"events\": [ … ],\n \"results\": { … }}\n```\n\nAnt state codes: `0` searching forager, `1` searching scout, `2` carrying,\n`3` at nest, held by recall. `src` rows are `[id, cx, cy, amount]`.\n\n### Event vocabulary\n\nEvery record carries `t` (tick), and `turn` where meaningful.\n\n| `type` | Fields |\n|---|---|\n| `match_start` | `t`, `seed`, `field`, `colonies`, `ants_per_colony`, `episode_ticks` |\n| `turn_start` | `t`, `turn`, `delivered`, `sources_live` |\n| `doctrine` | `t`, `turn`, `seat`, `colony`, `source`, `latency_ms`, the nine doctrine fields, `note`, `say` |\n| `fallback` | `t`, `turn`, `seat`, `attempt`, `cause`, `detail` |\n| `budget_guard` | `t`, `turn`, `remaining_s` |\n| `recall` | `t`, `turn`, `colony`, `ants_recalled` |\n| `source_spawn` | `t`, `kind`, `orbit`, `sources`, `near` |\n| `source_gone` | `t`, `source`, `cell`, `cause`, `taken` |\n| `harvest` | `t`, `s`, `c`, `u` |\n| `deliver` | `t`, `c`, `n`, `s`, `r` |\n| `raid` | `t`, `colony`, `victim`, `source`, `units` |\n| `trail_war` | `t`, `block`, `colonies`, `strengths` |\n| `end` | `t`, `reason`, `end_rule`, `delivered`, `scores`, `winner` |\n\n## Runtime contract\n\n`bitworld/runtime`: `COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`,\n`COGAME_SAVE_REPLAY_URI`, `COGAME_LOAD_REPLAY_URI`,\n`COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI` and `COGAME_METRICS_URI` —\nthe last two `file://`-only and loudly rejected otherwise. The end-of-episode\nwrite order is: broadcast `done` to every seat with a 3 s per-seat deadline →\nwrite the replay → write the results.\n\nThe game container does **not** receive `COWORLD_TIMEOUT_SECONDS`; 1200 s is\nassumed. Every wait is bounded: two LLM attempt deadlines (14 s then 6 s), one\nper-turn budget of 22 s, `playerConnectTimeoutSeconds` on the connect wait, a\n3 s per-seat deadline on the final done-broadcast, and a 660 s engine stop.\n"
+          }
+        }
+      ]
+    },
+    "player": [
+      {
+        "id": "baseline",
+        "name": "marcher",
+        "type": "player",
+        "image": "{{HIVE_IMAGE}}",
+        "run": [
+          "/bin/hive-player"
+        ],
+        "env": {
+          "PLAYER_SCRIPTED": "marcher"
+        },
+        "source_url": "https://github.com/Metta-AI/cogame-hive/tree/main"
+      }
+    ]
+  },
+  "variants": [
+    {
+      "id": "default",
+      "name": "Meadow (4 colonies, 200 s)",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "num_agents": 4,
+        "antsPerColony": 24,
+        "episodeTicks": 4800,
+        "turnTicks": 240,
+        "turnBudgetSeconds": 22,
+        "wallClockBudgetSeconds": 660,
+        "playerConnectTimeoutSeconds": 90,
+        "bonanzaTicks": [
+          1200,
+          3600
+        ],
+        "fieldPath": "meadow"
+      }
+    },
+    {
+      "id": "sprint",
+      "name": "Sprint meadow (4 colonies, 120 s)",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "num_agents": 4,
+        "antsPerColony": 24,
+        "episodeTicks": 2880,
+        "turnTicks": 240,
+        "turnBudgetSeconds": 22,
+        "wallClockBudgetSeconds": 420,
+        "playerConnectTimeoutSeconds": 90,
+        "bonanzaTicks": [
+          1200
+        ],
+        "fieldPath": "meadow"
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "P1"
+        },
+        {
+          "name": "P2"
+        },
+        {
+          "name": "P3"
+        },
+        {
+          "name": "P4"
+        }
+      ],
+      "num_agents": 4,
+      "seed": 42,
+      "antsPerColony": 24,
+      "episodeTicks": 960,
+      "turnTicks": 240,
+      "turnBudgetSeconds": 22,
+      "wallClockBudgetSeconds": 180,
+      "playerConnectTimeoutSeconds": 60,
+      "bonanzaTicks": [
+        480
+      ],
+      "fieldPath": "meadow"
+    }
+  }
+}

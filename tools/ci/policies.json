@@ -1,0 +1,31 @@
+[
+  {
+    "name": "hive-pathwright",
+    "run": "/bin/hive-player",
+    "env": {
+      "PLAYER_PROMPT": "Build one road at a time and keep it alive.\nOpen wide and close fast: for the first two turns run scouts near 60 with trail_gain under 30, because you have no road yet and a strong road to nowhere is worse than no road. The moment a food cache appears in your sources list, invert: scouts 12, trail_gain 85, lay_food 90, spread 30, focus on the block that cache sits in with focus_weight 80. A column that is fed keeps itself fed - every laden ant reinforces the same trail, and the half-life does the rest.\nWatch delivered_last_turn like a fuel gauge. If it is climbing, change nothing; a doctrine you keep for three turns is worth more than three clever doctrines, because trails take turns to build and one turn to lose. If it drops by more than a third in one turn your cache is out: do not keep pumping. Set recall true for exactly one turn, then relaunch with scouts 50, trail_gain 25 and focus null. Never set recall two turns running.\nKeep lay_home at 55 or above whenever your ants are working more than 25 cells out. Ants beyond 12 cells find the nest ONLY by the home trail, and a colony with a strong food road and a rotten home road drops its harvest in the grass.\nPoach at 15 as a standing habit, never more than 40. It is cheap directional information: your ants drift onto whatever road exists nearby, and any road nearby leads to food. Raise it only when your own sources list has been empty for two turns.\nTwice per match a big cache lands dead centre. When the scoreboard shows every colony gaining fast at once, that is it: focus the centre block with focus_weight 90 and trail_gain 90 and take your share while it lasts."
+    }
+  },
+  {
+    "name": "hive-swarmraid",
+    "run": "/bin/hive-player",
+    "env": {
+      "PLAYER_PROMPT": "Let the others find the food. Take it off their road.\nRun poach high - 60 to 85 - almost the whole match. Your ants do not need to find caches; they need to find ROADS, and a rival's food trail is a signed arrow pointing at a cache with a queue already on it. Every unit you lift there is a unit they do not score, and the scoring is a share, so it counts twice.\nRead the rival plane. Where your trails.rival grid shows a digit of 5 or more you are standing on somebody's highway - focus that block with focus_weight 75 and push trail_gain to 70 so your own ants pile onto the same lane and your paint goes over theirs. Where the rival grid is all dots you are blind, and blind is the one thing you cannot afford: hold scouts at 35 or above so there is always fresh rival paint in your readings.\nKeep spread high, 60 to 75. A raiding column that follows itself gets stuck behind its own traffic; you want a wide front that crosses more of the enemy's lanes.\nKeep lay_food moderate, around 55, and lay_home high, around 75. Your ants are usually working far from home on somebody else's ground, so the road back is the fragile part.\nContest the centre without exception. At the two bonanzas, focus the centre block, focus_weight 95, poach 40, trail_gain 80 - the centre needs no scouting and every colony will be there, so it is the cheapest raid on the board.\nUse recall only if your scoreboard position has been last for four straight turns; then recall one turn, come back with scouts 70 and focus null, and start hunting roads again."
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "hive-marcher",
+    "run": "/bin/hive-player",
+    "env": {
+      "PLAYER_SCRIPTED": "marcher"
+    }
+  },
+  {
+    "name": "hive-driftling",
+    "run": "/bin/hive-player",
+    "env": {
+      "PLAYER_SCRIPTED": "driftling"
+    }
+  }
+]
