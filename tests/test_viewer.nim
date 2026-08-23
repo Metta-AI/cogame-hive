@@ -102,6 +102,29 @@ proc main() =
     check("data-replay-error" in shell, "the failure attribute survives")
     report("the inherited replay status attributes survive")
 
+  block browserSmokeIsWired:
+    ## The only gate that EXECUTES the assembled page. A wasm-viewer job that
+    ## does not run it, or does not depend on the replay docker-smoke
+    ## produced, is the cogame-lantern hole (checklist item 13).
+    check(fileExists(repoRoot() / "tools" / "ci" / "viewer_smoke.mjs"),
+      "tools/ci/viewer_smoke.mjs is committed")
+    let workflow = readRepoFile(".github/workflows/ci.yml")
+    check("needs: docker-smoke" in workflow,
+      "wasm-viewer depends on docker-smoke for a real replay")
+    check("name: smoke-replay" in workflow,
+      "docker-smoke uploads the replay and wasm-viewer downloads it")
+    check("Load the bundle in a real browser" in workflow,
+      "the headless-chromium load step is present")
+    check("node tools/ci/viewer_smoke.mjs" in workflow,
+      "…and it runs the viewer smoke")
+    check("playwright@1.55.0" in workflow, "playwright is pinned in both places")
+    check("continue-on-error" notin workflow,
+      "no CI step is allowed to fail softly")
+    let smoke = readRepoFile("tools/ci/docker_smoke.sh")
+    check("SMOKE_REPLAY_OUT" in smoke,
+      "the smoke preserves its replay outside the trap-deleted work dir")
+    report("the browser load test is wired end to end in ci.yml")
+
   block chromeCommonVerbatim:
     ## chrome_common.js is copied unchanged; the page instantiates it and
     ## fails loud if the splice is missing.
