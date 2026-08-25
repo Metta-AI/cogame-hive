@@ -437,10 +437,21 @@ html, body {
 /* ---------- 3. BANNER LANE ---------- */
 #bannerlane {
   position: absolute;
-  top: calc(78 * var(--u));
+  /* Anchored BELOW the nest/cache row, not at a hardcoded 78u. --u scales with
+     the frame, so at the 1408 px Observatory width `78 * --u` landed the lane
+     directly on top of #nestbug and #cachebar and the RAID chips covered the
+     colony food counts. --hudrow is the measured height of that row (set in
+     relayout), so the lane clears it at every width. */
+  top: calc(var(--topband, 0px) + var(--hudrow, 30px) + 8px);
   left: 0; right: 0;
   display: flex;
   justify-content: center;
+  /* Raids arrive in bursts and each chip lives 2.6 s, so several are on screen
+     at once. A single nowrap centred row pushed them off BOTH edges (523 px
+     past the frame at 1408 px); wrap them and clip the lane instead. */
+  flex-wrap: wrap;
+  gap: calc(6 * var(--u));
+  padding: 0 calc(10 * var(--u));
   pointer-events: none;
   z-index: 12;
   min-height: calc(26 * var(--u)); /* reserved slot: layout never jumps */
@@ -463,6 +474,7 @@ html, body {
 /* the acting team's tint rides as a left accent bar (any team color) */
 .banner-chip.accent { box-shadow: inset calc(4 * var(--u)) 0 0 var(--tc, var(--amber)); }
 .banner-chip.leaving { animation: chipfade 260ms ease-in forwards; }
+.banner-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 @keyframes chippop { from { transform: translateY(calc(-8 * var(--u))) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes chipfade { to { opacity: 0; transform: translateY(calc(-4 * var(--u))); } }
 
@@ -1456,8 +1468,12 @@ body[data-embed] #board { top: 0; height: 100%; }
    the board right now". --- */
 #cachebar {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Sits on the same row as #nestbug. Centring it on the stage put it on top
+     of the last colony chip ("CACHES 10" over "Magenta 22") as soon as the
+     four nest chips were wide enough to reach the middle, so it is placed
+     after the row instead: --nestw is that row's measured width. */
+  left: calc(10 * var(--u, 1px) * var(--hudscale, 1) + var(--nestw, 0px) + 14px);
+  transform: none;
   top: calc(var(--topband, 0px) + 8px);
   display: flex;
   align-items: center;
@@ -1800,6 +1816,13 @@ body[data-embed] #board { top: 0; height: 100%; }
     el.style.setProperty('--tc', colour || '');
     el.textContent = text;
     host.appendChild(el);
+    // Each chip is one wrapped row, so the concurrent count IS the number of
+    // rows the lane can cover the board with. Three fit side by side in a wide
+    // frame; in an embedded one each chip takes a full row, so cap at two.
+    // Beyond the cap the oldest chip has had its moment and is retired early.
+    var cap = host.clientWidth >= 1000 ? 3 : 2;
+    var live = host.querySelectorAll('.banner-chip:not(.leaving)');
+    for (var i = 0; i + cap < live.length; i++) live[i].remove();
     window.setTimeout(function () {
       el.classList.add('leaving');
       window.setTimeout(function () { el.remove(); }, 300);
@@ -2112,6 +2135,13 @@ body[data-embed] #board { top: 0; height: 100%; }
       band = transport ? transport.offsetHeight : 0;
       root.style.setProperty('--topband', topBand + 'px');
       root.style.setProperty('--band', band + 'px');
+      // Height of the nest/cache row that sits at --topband + 8px, so the
+      // banner lane can be placed under it instead of over it.
+      var nestbug = $('nestbug');
+      root.style.setProperty('--hudrow',
+        ((nestbug ? nestbug.offsetHeight : 0) + 8) + 'px');
+      root.style.setProperty('--nestw',
+        (nestbug ? nestbug.offsetWidth : 0) + 'px');
       if (Math.abs(topBand - prevTop) < 0.5 && Math.abs(band - prevBand) < 0.5) break;
     }
   }
