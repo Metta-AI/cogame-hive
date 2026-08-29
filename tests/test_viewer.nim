@@ -172,6 +172,27 @@ proc main() =
       "the colony hues are wired onto the inherited team slots")
     report("chrome_common.js is verbatim and the page rides it")
 
+  block halfSpeedAndSpacePause:
+    ## The fleet-wide replay transport patch: a 0.5x chip (command '5') and
+    ## Space play/pause. Hive's speed lives entirely in the page's tick
+    ## accumulator (FPS * state.sp), so 0.5 needs no engine change; the wire
+    ## constants ride it ahead of the engine's integer PlaybackSpeeds.
+    check("window.HIVE_WIRE" in common,
+      "chrome_common reads hive's own WIRE global (the inherited CTF_WIRE " &
+      "lookup never resolved here)")
+    check("window.CTF_WIRE" notin common, "…and the dead CTF_WIRE read is gone")
+    check("[0.5, 1, 2, 3, 4, 8, 16]" in common,
+      "the raw-open SPEEDS fallback includes 0.5")
+    check("0.5: '5'" in common, "the 0.5 chip sends command '5'")
+    check("case '5': state.sp = 0.5; break;" in page,
+      "the page maps command '5' to half speed")
+    let wire = readRepoFile("tools/gen_wire_constants.nim")
+    check("[0.5," in wire,
+      "the emitted wire speeds ladder leads with 0.5")
+    check("if (event.key === ' ') { state.pl = !state.pl; event.preventDefault(); }" in page,
+      "Space toggles play/pause on the shipped page")
+    report("the 0.5x chip and the Space pause are wired end to end")
+
   block boardRenderer:
     check("HVP1" in core or "72" in core, "the packet magic is checked")
     check("min(0.55" in core.replace(" ", "") or "0.55" in core,

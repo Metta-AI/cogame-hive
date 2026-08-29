@@ -1656,6 +1656,10 @@ body[data-embed] #board { top: 0; height: 100%; }
   // ---- transport commands (the chrome speaks paintbot's command chars) ----
   function command(cmd) {
     switch (cmd) {
+      // '5' is the half-speed chip: the tick accumulator below multiplies
+      // FPS by state.sp, so 0.5 spends a sim tick every other frame with no
+      // engine involvement.
+      case '5': state.sp = 0.5; break;
       case '1': state.sp = 1; break;
       case '2': state.sp = 2; break;
       case '3': state.sp = 3; break;
