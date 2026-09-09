@@ -150,7 +150,8 @@ All per-seat arrays are length 4 in **slot** order.
  "turns_llm": [20, 19, 0, 0],
  "fallback_turns": [0, 1, 0, 0],
  "fallback_causes": [{"timeout": 0, "parse_error": 0, "transport_error": 0,
-                      "no_credentials": 0, "budget_guard": 0}, … 4 … ],
+                      "no_credentials": 0, "budget_guard": 0, "throttled": 0,
+                      "refusal": 0, "provider_error": 0}, … 4 … ],
  "total_delivered": 1300,
  "sources_spawned": 76,
  "reason": "complete",
@@ -164,6 +165,28 @@ All per-seat arrays are length 4 in **slot** order.
 `reason` is one of `complete` / `deadline` / `fault`; `end_rule` is one of
 `full_time` / `wall_clock` / `sim_fault` / `host_error`. `winner` is a slot
 index `0…3` or `null`.
+
+`fallback_causes[seat]` is a histogram over the `fallback.cause` enum, one
+integer per cause. Key order is append-only, so a reader that knows only the
+first five still finds them where they were:
+
+| `cause` | Meaning |
+|---|---|
+| `timeout` | no reply arrived inside the attempt deadline, or the per-turn budget ran out before the seat could be asked |
+| `parse_error` | the model replied, but no doctrine object could be recovered from the text |
+| `transport_error` | the request never completed: DNS, connect or transport failure |
+| `no_credentials` | no LLM credentials, or the provider rejected them (401, or 403 on the last candidate model) |
+| `budget_guard` | the episode's wall-clock guard engaged; the LLM was not asked |
+| `throttled` | the sidecar or provider answered 429 (request-rate or token quota) |
+| `refusal` | the model refused to answer (`stop_reason: "refusal"`) |
+| `provider_error` | the provider answered 5xx, or rejected the request for this model (a Bedrock 403 while other candidates remain) |
+
+Only `parse_error` means the prompt produced an unusable reply; the last three
+mean the model was never usefully asked. A `throttled` or `provider_error`
+first attempt backs off before the single retry (`retry-after` if the provider
+sent an integer one, else 2 s, capped at 4 s and clamped so the retry still
+fits the turn), and that retry re-sends the unmodified message rather than the
+"your previous reply was invalid" hint.
 
 ## Spectator channel — `hive.global.v1`
 
@@ -215,7 +238,7 @@ Every record carries `t` (tick), and `turn` where meaningful.
 | `match_start` | `t`, `seed`, `field`, `colonies`, `ants_per_colony`, `episode_ticks` |
 | `turn_start` | `t`, `turn`, `delivered`, `sources_live` |
 | `doctrine` | `t`, `turn`, `seat`, `colony`, `source`, `latency_ms`, the nine doctrine fields, `note`, `say` |
-| `fallback` | `t`, `turn`, `seat`, `attempt`, `cause`, `detail` |
+| `fallback` | `t`, `turn`, `seat`, `attempt`, `cause` (the enum under "Results document"), `detail` |
 | `budget_guard` | `t`, `turn`, `remaining_s` |
 | `recall` | `t`, `turn`, `colony`, `ants_recalled` |
 | `source_spawn` | `t`, `kind`, `orbit`, `sources`, `near` |

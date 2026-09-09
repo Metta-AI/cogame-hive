@@ -184,7 +184,7 @@ proc main() =
     match.runEpisode(recording)
     match.endMatch(erComplete, euFullTime)
     var turnsLlm, fallbackTurns: array[Colonies, int]
-    var causes: array[Colonies, array[5, int]]
+    var causes: array[Colonies, array[8, int]]
     let names = @["daveey", "daveey-1", "Baseline (1)", "Baseline (2)"]
     let results = resultsJson(match, names,
       @["llm", "llm", "scripted", "scripted"], turnsLlm, fallbackTurns, causes)

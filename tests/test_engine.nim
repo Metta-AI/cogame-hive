@@ -3,6 +3,9 @@
 ## early, the wall-clock stop yields deadline/wall_clock, a sim fault yields
 ## fault/sim_fault with 0.25 everywhere and a partial replay, an unregistered
 ## seat plays the marcher, and a mid-match disconnect degrades and revives.
+## Also (#4): a sidecar 429 / 503 / refusal is reported as throttled /
+## provider_error / refusal rather than parse_error, a throttled retry backs
+## off inside the turn budget and re-sends the unmodified message.
 
 import std/[json, os, strutils, times, unicode]
 import curly
@@ -13,6 +16,13 @@ type BatchRecord = object
   size: int
   opened: float
   closed: float
+  bodies: seq[string]
+
+const RetryHint = "Your previous reply was invalid"
+
+proc bodiesOf(batch: RequestBatch): seq[string] =
+  for index in 0 ..< batch.len:
+    result.add(batch[index].body)
 
 var records: seq[BatchRecord]
 var windows: seq[tuple[opened, closed: float]]
@@ -54,7 +64,7 @@ proc fakeGarbage(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
     {.gcsafe.} =
   {.gcsafe.}:
     records.add(BatchRecord(size: batch.len, opened: epochTime(),
-      closed: epochTime()))
+      closed: epochTime(), bodies: bodiesOf(batch)))
     for index in 0 ..< batch.len:
       result.add((response: Response(code: 200, body: $ %*{
         "content": [{"type": "text", "text": "I would rather not."}]}),
@@ -85,6 +95,43 @@ proc fakeForbidden(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
       result.add((response: Response(code: 403, body:
         "{\"message\":\"You don't have access to the model with the " &
         "specified model ID.\"}"), error: ""))
+
+proc fakeThrottled(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
+    {.gcsafe.} =
+  ## The sidecar's 30 rpm cap exactly as the league saw it (#4), with a
+  ## `retry-after` the client is expected to honour.
+  {.gcsafe.}:
+    records.add(BatchRecord(size: batch.len, opened: epochTime(),
+      closed: epochTime(), bodies: bodiesOf(batch)))
+    for index in 0 ..< batch.len:
+      var headers: HttpHeaders
+      headers["Retry-After"] = "1"
+      result.add((response: Response(code: 429, headers: headers, body:
+        "{\"message\": \"sidecar request rate limit reached " &
+        "(30 requests/minute)\", \"__type\": \"ThrottlingException\"}"),
+        error: ""))
+
+proc fakeUnavailable(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
+    {.gcsafe.} =
+  ## The other half of #4's corpus: a 503 from the sidecar, here with a
+  ## `retry-after` that is not an integer and must be ignored.
+  {.gcsafe.}:
+    records.add(BatchRecord(size: batch.len, opened: epochTime(),
+      closed: epochTime(), bodies: bodiesOf(batch)))
+    for index in 0 ..< batch.len:
+      var headers: HttpHeaders
+      headers["retry-after"] = "Wed, 21 Oct 2026 07:28:00 GMT"
+      result.add((response: Response(code: 503, headers: headers,
+        body: "{\"message\":\"LLM provider is unavailable\"}"), error: ""))
+
+proc fakeRefusal(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
+    {.gcsafe.} =
+  {.gcsafe.}:
+    records.add(BatchRecord(size: batch.len, opened: epochTime(),
+      closed: epochTime(), bodies: bodiesOf(batch)))
+    for index in 0 ..< batch.len:
+      result.add((response: Response(code: 200, body: $ %*{
+        "stop_reason": "refusal", "content": []}), error: ""))
 
 proc enabledClient(): LlmClient =
   result = newLlmClient()
@@ -151,7 +198,167 @@ proc main() =
       checkEqual(outcomes[seat].cause, "parse_error", "cause is parse_error")
       check(outcomes[seat].resolved.doctrine.isLegal(),
         "the fallback doctrine is legal")
+    for body in records[0].bodies:
+      check(RetryHint notin body, "the first attempt carries no hint")
+    for body in records[1].bodies:
+      check(RetryHint in body,
+        "a seat whose reply was unusable is told so on the retry")
+    ## The backoff fixtures below never sleep less than 1 s, so "no backoff"
+    ## is "well under that", with room for a slow debug build.
+    check(records[1].opened - records[0].closed < 0.9,
+      "a parse failure is retried without a backoff")
     report("tolerant parse, exactly one retry, then the marcher doctrine")
+
+  block throttledIsNotAParseError:
+    ## #4: every sidecar failure the league saw was a 429 or a 503, and
+    ## `classify` filed all of them under parse_error, so
+    ## results.fallback_causes blamed the player's prompt for a throttled
+    ## sidecar.
+    records.setLen(0)
+    let client = enabledClient()
+    client.turnBudgetSeconds = 9.0
+    client.sendBatch = fakeThrottled
+    var match = newSim(testConfig(240, 5), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    let started = epochTime()
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let elapsed = epochTime() - started
+    checkEqual(records.len, 2, "a throttled batch is retried exactly once")
+    checkEqual(records[1].size, Colonies, "the retry re-batches all four")
+    for seat in 0 ..< Colonies:
+      checkEqual(outcomes[seat].cause, "throttled", "the cause is throttled")
+      checkEqual($outcomes[seat].resolved.source, "fallback", "it fell back")
+      check(outcomes[seat].resolved.doctrine.isLegal(),
+        "the fallback doctrine is legal")
+      checkEqual(outcomes[seat].attempts, 2, "two attempts are recorded")
+      check("429" in outcomes[seat].detail, "detail keeps the 429 text")
+      check(outcomes[seat].detail.runeLen <= MaxDetailRunes,
+        "detail stays within MaxDetailRunes")
+    for body in records[1].bodies:
+      check(RetryHint notin body,
+        "a throttled seat is NOT told its reply was invalid - it never replied")
+    checkEqual(records[1].bodies, records[0].bodies,
+      "the retry re-sends the unmodified message")
+    let gap = records[1].opened - records[0].closed
+    check(gap >= 0.9, "the retry honours retry-after: 1 (waited " &
+      $gap & "s)")
+    check(gap < 1.8, "and no longer than that")
+    check(elapsed < client.turnBudgetSeconds,
+      "the backoff keeps the turn inside the outer budget (took " &
+      $elapsed & "s)")
+    report("a 429 is reported as throttled and the retry backs off")
+
+  block providerErrorIsNotAParseError:
+    records.setLen(0)
+    let client = enabledClient()
+    ## 8 s left minus the 6 s retry minus 1 s slack clamps the default 2 s
+    ## backoff to 1 s: the retry must still fit the turn.
+    client.turnBudgetSeconds = 8.0
+    client.sendBatch = fakeUnavailable
+    var match = newSim(testConfig(240, 5), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    let started = epochTime()
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let elapsed = epochTime() - started
+    checkEqual(records.len, 2, "a 503 is retried exactly once")
+    for seat in 0 ..< Colonies:
+      checkEqual(outcomes[seat].cause, "provider_error",
+        "the cause is provider_error")
+      checkEqual($outcomes[seat].resolved.source, "fallback", "it fell back")
+      check(outcomes[seat].resolved.doctrine.isLegal(),
+        "the fallback doctrine is legal")
+      check("unavailable" in outcomes[seat].detail, "detail keeps the body")
+    for body in records[1].bodies:
+      check(RetryHint notin body, "no invalid-reply hint after a 503")
+    let gap = records[1].opened - records[0].closed
+    check(gap >= 0.9, "a junk retry-after falls back to the default " &
+      "backoff (waited " & $gap & "s)")
+    check(gap < 1.8, "clamped so the 6 s retry still fits an 8 s turn")
+    check(elapsed < client.turnBudgetSeconds,
+      "the turn stays inside the outer budget (took " & $elapsed & "s)")
+    report("a 503 is reported as provider_error with a clamped backoff")
+
+  block refusalIsNotAParseError:
+    records.setLen(0)
+    let client = enabledClient()
+    client.sendBatch = fakeRefusal
+    var match = newSim(testConfig(240, 5), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    checkEqual(records.len, 2, "a refusal is retried exactly once")
+    for seat in 0 ..< Colonies:
+      checkEqual(outcomes[seat].cause, "refusal", "the cause is refusal")
+      checkEqual($outcomes[seat].resolved.source, "fallback", "it fell back")
+      check(outcomes[seat].resolved.doctrine.isLegal(),
+        "the fallback doctrine is legal")
+    for body in records[1].bodies:
+      check(RetryHint notin body, "a refusal is not an invalid reply")
+    check(records[1].opened - records[0].closed < 0.9,
+      "a refusal is retried without a backoff")
+    report("a refusal is reported as refusal")
+
+  block classifyTable:
+    ## Every string `textOf` raises, mapped the way #4 asks.
+    let table = [
+      ("llm throttled (429): {\"message\": \"sidecar request rate limit " &
+        "reached (30 requests/minute)\", \"__type\": \"ThrottlingException\"}",
+        "throttled"),
+      ("llm throttled (429): {\"message\":\"Too many tokens per day, please " &
+        "wait before trying again.\"}", "throttled"),
+      ("anthropic error 503: {\"message\":\"LLM provider is unavailable\"}",
+        "provider_error"),
+      ("anthropic error 500: {\"type\":\"api_error\"}", "provider_error"),
+      ("anthropic error 529: overloaded", "provider_error"),
+      ("bedrock model rejected (403): {\"message\":\"You don't have access " &
+        "to the model with the specified model ID.\"}", "provider_error"),
+      ("anthropic refusal", "refusal"),
+      ("llm auth failed (401) at https://api.anthropic.com/v1/messages: " &
+        "{\"type\":\"authentication_error\"}", "no_credentials"),
+      ("llm auth failed (403) at http://127.0.0.1:9100/model/x/invoke: denied",
+        "no_credentials"),
+      ("llm transport: Could not resolve host: api.anthropic.com",
+        "transport_error"),
+      ("llm transport: Failed to connect to 127.0.0.1 port 9100",
+        "transport_error"),
+      ("llm transport: Operation timed out after 14000 milliseconds",
+        "timeout"),
+      ("reply cut off at max_tokens before any JSON: Let me think about",
+        "parse_error"),
+      ("no doctrine object in reply", "parse_error"),
+    ]
+    for (message, expected) in table:
+      checkEqual(classify(message), expected, "classify(" & message & ")")
+    checkEqual(FallbackCauses.len, 8, "eight causes")
+    checkEqual(@FallbackCauses, @["timeout", "parse_error", "transport_error",
+      "no_credentials", "budget_guard", "throttled", "refusal",
+      "provider_error"], "in append-only key order")
+    for cause in FallbackCauses:
+      checkEqual(FallbackCauses[causeIndex(cause)], cause,
+        cause & " indexes its own counter")
+    checkEqual(causeIndex("something new"), 1,
+      "an unknown cause still counts as parse_error")
+    var counts: array[Colonies, array[8, int]]
+    counts[2][causeIndex("throttled")] = 3
+    counts[2][causeIndex("provider_error")] = 1
+    let histogram = fallbackCauseJson(counts, 2)
+    checkEqual(histogram.len, 8, "the histogram carries all eight keys")
+    checkEqual(histogram["throttled"].getInt(), 3, "throttled counted")
+    checkEqual(histogram["provider_error"].getInt(), 1,
+      "provider_error counted")
+    checkEqual(histogram["parse_error"].getInt(), 0, "and parse_error is not")
+    ## The backoff clamp: retry-after wins when usable, else 2 s, never more
+    ## than 4 s, and never past what leaves the 6 s retry inside the turn.
+    checkEqual(retryBackoffSeconds(-1, 22.0), 2.0, "no header: 2 s")
+    checkEqual(retryBackoffSeconds(1, 22.0), 1.0, "a short retry-after wins")
+    checkEqual(retryBackoffSeconds(30, 22.0), 4.0,
+      "a long one is capped at 4 s")
+    checkEqual(retryBackoffSeconds(-1, 8.0), 1.0,
+      "clamped so RetryAttemptSeconds + 1 s still fits")
+    checkEqual(retryBackoffSeconds(3, 6.0), 0.0, "never negative")
+    report("classify maps every raised string to the documented cause")
 
   block hungClientIsBounded:
     records.setLen(0)
@@ -313,7 +520,7 @@ proc main() =
     check(not negative.invariantsOk(), "a negative source amount trips")
     checkEqual(negative.faultDetail, "source amount below zero", "named")
     var turnsLlm, fallbackTurns: array[Colonies, int]
-    var causes: array[Colonies, array[5, int]]
+    var causes: array[Colonies, array[8, int]]
     let results = resultsJson(match, @["a", "b", "c", "d"],
       @["llm", "llm", "scripted", "scripted"], turnsLlm, fallbackTurns, causes)
     for seat in 0 ..< Colonies:

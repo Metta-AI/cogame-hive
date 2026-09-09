@@ -57,7 +57,7 @@ when isMainModule:
     }, 2) & "\n")
 
   var turnsLlm, fallbackTurns: array[Colonies, int]
-  var causes: array[Colonies, array[5, int]]
+  var causes: array[Colonies, array[8, int]]
   let names = @["daveey", "daveey-1", "Baseline (1)", "Baseline (2)"]
   let kindNames = @["scripted", "scripted", "scripted", "scripted"]
   let results = resultsJson(match, names, kindNames, turnsLlm, fallbackTurns,

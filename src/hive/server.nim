@@ -228,7 +228,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
     var memory: array[Colonies, BaselineMemory]
     var turnsLlm: array[Colonies, int]
     var fallbackTurns: array[Colonies, int]
-    var fallbackCauses: array[Colonies, array[5, int]]
+    var fallbackCauses: array[Colonies, array[8, int]]
     var guardEngaged = false
 
     let wallBudget =
