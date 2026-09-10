@@ -28,7 +28,7 @@ proc episode(): tuple[match: Sim, results: JsonNode, bytes: string] =
         result[seat].doctrine.say = "road \u00e9\u00e8 \u{1F41C}"
   match.runEpisode(provide)
   var turnsLlm, fallbackTurns: array[Colonies, int]
-  var causes: array[Colonies, array[5, int]]
+  var causes: array[Colonies, array[8, int]]
   let results = resultsJson(match, @Names,
     @["scripted", "scripted", "scripted", "scripted"], turnsLlm,
     fallbackTurns, causes)

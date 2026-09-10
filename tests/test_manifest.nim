@@ -156,7 +156,7 @@ proc main() =
     var match = newSim(testConfig(240, 42), testField())
     match.runEpisode(scriptedProvider(allMarcher()))
     var turnsLlm, fallbackTurns: array[Colonies, int]
-    var causes: array[Colonies, array[5, int]]
+    var causes: array[Colonies, array[8, int]]
     let emitted = resultsJson(match, @["a", "b", "c", "d"],
       @["llm", "llm", "scripted", "scripted"], turnsLlm, fallbackTurns, causes)
     var emittedKeys: seq[string]

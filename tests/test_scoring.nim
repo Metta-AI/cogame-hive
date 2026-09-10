@@ -52,7 +52,7 @@ proc main() =
     checkEqual(match.winnerSlot(), -1, "a tied maximum has no winner")
     match.endMatch(erComplete, euFullTime)
     var turnsLlm, fallbackTurns: array[Colonies, int]
-    var causes: array[Colonies, array[5, int]]
+    var causes: array[Colonies, array[8, int]]
     let results = resultsJson(match, @["a", "b", "c", "d"],
       @["scripted", "scripted", "scripted", "scripted"], turnsLlm,
       fallbackTurns, causes)
@@ -80,7 +80,7 @@ proc main() =
     let faulted = simWith([100, 20, 5, 1])
     faulted.endMatch(erFault, euSimFault)
     var turnsLlm, fallbackTurns: array[Colonies, int]
-    var causes: array[Colonies, array[5, int]]
+    var causes: array[Colonies, array[8, int]]
     let results = resultsJson(faulted, @["a", "b", "c", "d"],
       @["llm", "llm", "scripted", "scripted"], turnsLlm, fallbackTurns, causes)
     var total = 0.0

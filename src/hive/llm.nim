@@ -5,9 +5,11 @@
 ##
 ## Decisions are simultaneous by rule, so all four requests go out as ONE
 ## PARALLEL BATCH (`curly.makeRequests`, bullwhip's `decideAll` shape);
-## invalid replies are retried once as a smaller batch with a hint, and
-## anything still failing falls back to the `marcher` scripted doctrine and
-## writes a `fallback` event. Seats are NEVER queried sequentially.
+## failed seats are retried once as a smaller batch - with a "your reply was
+## invalid" hint only when the model actually replied with something
+## unusable, and after a short backoff when the provider throttled or errored
+## - and anything still failing falls back to the `marcher` scripted doctrine
+## and writes a `fallback` event. Seats are NEVER queried sequentially.
 ##
 ## Credentials, in order of preference:
 ##   Bedrock sidecar / bearer token   - hosted pods
@@ -259,7 +261,13 @@ proc textOf(
 
 proc classify*(message: string): string =
   ## The `fallback.cause` enum: timeout / parse_error / transport_error /
-  ## no_credentials / budget_guard.
+  ## no_credentials / budget_guard / throttled / refusal / provider_error
+  ## (`budget_guard` is assigned by the server, never here). Matched against
+  ## the strings `textOf` raises, in this order; `parse_error` is the
+  ## catch-all for a reply the model really did send and we could not use,
+  ## so a 429, a 5xx, a per-model 403 and a refusal must be caught first or
+  ## `results.fallback_causes` blames the player's prompt for a provider
+  ## outage (#4).
   let lowered = message.toLowerAscii()
   if "timed out" in lowered or "timeout" in lowered:
     "timeout"
@@ -267,8 +275,41 @@ proc classify*(message: string): string =
     "transport_error"
   elif "auth" in lowered or "credential" in lowered:
     "no_credentials"
+  elif "throttled" in lowered or "(429)" in lowered:
+    "throttled"
+  elif "refusal" in lowered:
+    "refusal"
+  elif "rejected" in lowered or "unavailable" in lowered or
+      "anthropic error 5" in lowered:
+    "provider_error"
   else:
     "parse_error"
+
+proc retryBackoffSeconds*(retryAfter: int, remaining: float): float =
+  ## How long the retry batch waits after a `throttled` or `provider_error`
+  ## first attempt: the provider's `retry-after` when it sent a usable one
+  ## (`retryAfter` < 0 means it did not), else 2 s; never more than 4 s and
+  ## never so long that the retry attempt no longer fits in `remaining`, what
+  ## is left of the outer turn deadline. Firing the retry ~150 ms into the
+  ## same rate limit only deepens the throttle (#4).
+  let wanted = if retryAfter >= 0: retryAfter.float else: 2.0
+  min(wanted, min(4.0, max(0.0, remaining - RetryAttemptSeconds.float - 1.0)))
+
+proc withNote(detail, note: string): string =
+  ## Appends `note` to a recorded detail only when the result still fits
+  ## `MaxDetailRunes`; the caller echoes the note regardless.
+  if note.len > 0 and (detail & note).runeLen <= MaxDetailRunes:
+    detail & note
+  else:
+    detail
+
+proc needsBackoff(open: seq[int],
+    outcomes: array[Colonies, SeatOutcome]): bool =
+  for seat in open:
+    if outcomes[seat].cause == "throttled" or
+        outcomes[seat].cause == "provider_error":
+      return true
+  false
 
 proc decideAll*(
   client: LlmClient,
@@ -308,9 +349,25 @@ proc decideAll*(
   ## scripted layer instead of starting an attempt that cannot finish in time.
   let turnDeadline = epochTime() + max(1.0, client.turnBudgetSeconds)
   var outerExpired = false
+  var retryAfter = -1
+    ## Seconds from a `retry-after` header on a throttled / provider-error
+    ## response in the first batch; -1 when none carried a usable one.
+  var backoffNote: array[Colonies, string]
   for attempt in 0 .. 1:
     if open.len == 0 or client.disabled:
       break
+    if attempt == 1 and needsBackoff(open, result):
+      ## The provider said "not now": wait before the one retry, inside the
+      ## outer deadline, instead of hammering the same rate limit.
+      let backoff = retryBackoffSeconds(retryAfter, turnDeadline - epochTime())
+      if backoff > 0.0:
+        let label = formatFloat(backoff, ffDecimal, 1) & "s"
+        echo "hive llm: first attempt throttled or provider error; backing " &
+          "off ", label, " before the retry (retry-after ",
+          (if retryAfter >= 0: $retryAfter & "s" else: "absent"), ")"
+        for seat in open:
+          backoffNote[seat] = " [retried after " & label & " backoff]"
+        sleep(int(backoff * 1000.0))
     let remaining = turnDeadline - epochTime()
     if remaining <= 0.0:
       outerExpired = true
@@ -321,7 +378,10 @@ proc decideAll*(
     var batch: RequestBatch
     for seat in open:
       var user = userMessage(match, seat, prompts[seat])
-      if attempt > 0:
+      ## The hint is for a model that REPLIED with something unusable. A seat
+      ## that was throttled, timed out or hit a provider error never saw its
+      ## first message answered, so it gets the unmodified message again.
+      if attempt > 0 and result[seat].cause == "parse_error":
         user.add("\n\nYour previous reply was invalid. Respond with ONLY the " &
           "requested JSON object, beginning with '{' and containing the " &
           "integer keys scouts, trail_gain, poach, spread, lay_food, " &
@@ -350,9 +410,21 @@ proc decideAll*(
       except CatchableError as error:
         echo "hive llm: seat ", seat, " attempt ", attempt + 1, " failed: ",
           error.msg
+        let cause = classify(error.msg)
+        if attempt == 0 and (cause == "throttled" or cause == "provider_error"):
+          ## Honour `retry-after` (integer seconds only; an HTTP-date or any
+          ## other junk is ignored). The largest value in the batch wins.
+          let header =
+            responses[position].response.headers["retry-after"].strip()
+          if header.len > 0:
+            try:
+              retryAfter = max(retryAfter, parseInt(header))
+            except ValueError:
+              discard
         result[seat] = SeatOutcome(
-          cause: classify(error.msg),
-          detail: truncateRunes(error.msg, MaxDetailRunes),
+          cause: cause,
+          detail: withNote(truncateRunes(error.msg, MaxDetailRunes),
+            backoffNote[seat]),
           attempts: attempt + 1
         )
         stillOpen.add(seat)

@@ -134,20 +134,24 @@ proc runEpisode*(
 
 # ---- results ----------------------------------------------------------------
 
-proc fallbackCauseJson*(counts: array[Colonies, array[5, int]], seat: int):
-    JsonNode =
-  %*{
-    "timeout": counts[seat][0],
-    "parse_error": counts[seat][1],
-    "transport_error": counts[seat][2],
-    "no_credentials": counts[seat][3],
-    "budget_guard": counts[seat][4]
-  }
-
 const FallbackCauses* = ["timeout", "parse_error", "transport_error",
-  "no_credentials", "budget_guard"]
+  "no_credentials", "budget_guard", "throttled", "refusal", "provider_error"]
+  ## The `fallback.cause` enum, in `results.fallback_causes` key order. The
+  ## order is append-only: a reader that knows only the first five still
+  ## finds them where they were.
+
+static:
+  doAssert FallbackCauses.len == 8,
+    "fallback cause counts are array[8, int] everywhere; widen them together"
+
+proc fallbackCauseJson*(counts: array[Colonies, array[8, int]], seat: int):
+    JsonNode =
+  result = newJObject()
+  for index, name in FallbackCauses:
+    result[name] = %counts[seat][index]
 
 proc causeIndex*(cause: string): int =
+  ## An unknown cause counts as parse_error, the historical catch-all.
   for index, name in FallbackCauses:
     if name == cause:
       return index
@@ -159,7 +163,7 @@ proc resultsJson*(
   policyKinds: seq[string],
   turnsLlm: array[Colonies, int],
   fallbackTurns: array[Colonies, int],
-  fallbackCauses: array[Colonies, array[5, int]]
+  fallbackCauses: array[Colonies, array[8, int]]
 ): JsonNode =
   ## The closed results document. Adding or removing a key here means editing
   ## `coworld_manifest_template.json`'s `results_schema` in the same commit.
