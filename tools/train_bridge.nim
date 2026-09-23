@@ -130,10 +130,11 @@ proc encoding(game: Sim, seat, id: int, variant: string): JsonNode =
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len notin 1 .. 2:
-    quit("usage: hive-train-bridge MANIFEST [variant]", 1)
-  let variant = if args.len == 2: args[1] else: Variants[0]
+  if args.len != 3:
+    quit("usage: hive-train-bridge MANIFEST VARIANT FIELD_SPEC", 1)
+  let variant = args[1]
   let manifest = parseFile(args[0])
+  let meadow = parseFieldSpec(parseFile(args[2]))
   var variantConfig: JsonNode
   for entry in manifest["variants"]:
     if entry["id"].getStr() == variant:
@@ -156,7 +157,8 @@ when isMainModule:
       runtimeConfig["tokens"] = %*["t0", "t1", "t2", "t3"]
       runtimeConfig["seed"] = %seedOf(request["seed"].getStr())
       config.update($runtimeConfig)
-      game = newSim(config, loadField(config.fieldPath))
+      doAssert meadow.name == config.fieldPath
+      game = newSim(config, meadow)
       game.beginTurn()
       memory = default(array[Colonies, BaselineMemory])
       for other in 0 ..< Colonies:

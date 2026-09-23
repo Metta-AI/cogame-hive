@@ -9,8 +9,9 @@ from pathlib import Path
 
 def play(binary: Path, variant: str, teacher: bool) -> None:
     manifest = Path(__file__).resolve().parent.parent / "coworld_manifest_template.json"
+    field = manifest.parent / "data" / "meadow.fieldspec.json"
     process = subprocess.Popen(
-        [str(binary), str(manifest), variant],
+        [str(binary), str(manifest), variant, str(field)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,

@@ -9,7 +9,8 @@ nim c -d:release --path:src -o:/tmp/hive-train-bridge tools/train_bridge.nim
 python3 tools/test_train_bridge.py /tmp/hive-train-bridge
 ```
 
-Pass the binary, `coworld_manifest_template.json`, and `default` or `sprint`
+Pass the binary, `coworld_manifest_template.json`, `default` or `sprint`,
+and `data/meadow.fieldspec.json`
 to Metta's `recipes.external.coworld_metta_rl.train` or
 `recipes.external.coworld.train`. Use `players=4` and a finite
 `total_timesteps`. The bridge has 1,575 numeric features and ten action heads
