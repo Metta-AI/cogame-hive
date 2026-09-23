@@ -149,6 +149,26 @@ jobs:
           done
           exit "${fail}"
 
+      - name: Complete training games
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:/tmp/hive-train-bridge tools/train_bridge.nim
+          python3 tools/test_train_bridge.py /tmp/hive-train-bridge
+          nim c -d:release --path:src -o:/tmp/hive-export-posttrain tools/export_posttrain.nim
+          /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-default" 10 1 default
+          /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-sprint" 10 1 sprint
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          for variant, train, validation in (("default", 640, 160), ("sprint", 384, 96)):
+              manifest = json.loads((root / f"hive-{variant}" / "manifest.json").read_text())
+              assert manifest["train_examples"] == train
+              assert manifest["validation_examples"] == validation
+          PY
+
       # Acceptance checklist item 7: "the baseline's parameters were tuned
       # with a grid harness, not guessed". This is that harness. Release only
       # -- it plays 27 episodes and a debug build would take minutes. It
