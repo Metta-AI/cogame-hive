@@ -3,3 +3,4 @@ nimcache/
 replay-viewer/dist/
 dist/
 *.exe
+__pycache__/

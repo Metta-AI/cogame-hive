@@ -23,6 +23,7 @@ type
     everConnected*: bool
     prompt*: string
     scripted*: ScriptKind
+    external*: bool
     policyLabel*: string
     registered*: bool
 
@@ -49,7 +50,8 @@ proc authorize*(roster: Roster, slot: int, token: string): JoinError =
 proc register*(
   roster: var Roster,
   slot: int,
-  prompt, scripted, policy: string
+  prompt, scripted, policy: string,
+  external = false
 ) =
   ## The only frame a player container must send. Over-long prompts are
   ## TRUNCATED at the transport, not rejected, and never written to the
@@ -61,12 +63,16 @@ proc register*(
     text = text.runeSubStr(0, MaxPromptRunes)
   let kind = parseScriptKind(scripted)
   roster.seats[slot].prompt = text
+  roster.seats[slot].external = external
   roster.seats[slot].scripted =
-    if kind != skNone: kind
+    if external: skNone
+    elif kind != skNone: kind
     elif text.strip().len > 0: skNone
     else: skMarcher
   roster.seats[slot].policyLabel = truncatePolicy(policy)
   roster.seats[slot].registered = true
 
 proc policyKind*(seat: Seat): string =
-  if seat.scripted == skNone: "llm" else: "scripted"
+  if seat.external: "external"
+  elif seat.scripted == skNone: "llm"
+  else: "scripted"

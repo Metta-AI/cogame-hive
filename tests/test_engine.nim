@@ -180,6 +180,25 @@ proc main() =
         check(event{"note"}.getStr().len > 0, "with real note content")
     report("all four seats' calls go out as one parallel batch per turn")
 
+  block ordinarySeatKeepsModelBatchTogether:
+    records.setLen(0)
+    let client = enabledClient()
+    client.sendBatch = fakeGood
+    let match = newSim(testConfig(240, 42), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    var external: array[Colonies, bool]
+    external[0] = true
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted,
+      memory, 0, external)
+    checkEqual(records.len, 1, "model seats still use one batch")
+    checkEqual(records[0].size, 3,
+      "the ordinary seat is excluded from the model batch")
+    for seat in 1 ..< Colonies:
+      checkEqual(outcomes[seat].resolved.source, dsLlm,
+        "the other three seats still receive model decisions")
+    report("an ordinary seat leaves the other three model calls batched")
+
   block boundedRetryThenFallback:
     records.setLen(0)
     let client = enabledClient()
@@ -550,6 +569,11 @@ proc main() =
     checkEqual(seats.seats[1].policyKind(), "llm", "reported as llm")
     seats.register(2, "", "driftling", "")
     checkEqual(seats.seats[2].scripted, skDriftling, "PLAYER_SCRIPTED wins")
+    seats.register(3, "", "", "ordinary", true)
+    checkEqual(seats.seats[3].policyKind(), "external",
+      "an ordinary player is registered as an external doctrine source")
+    checkEqual(seats.seats[3].scripted, skNone,
+      "an external seat does not become a scripted seat")
     report("an unregistered seat plays the marcher for the whole match")
 
   block disconnectDegradesAndRevives:

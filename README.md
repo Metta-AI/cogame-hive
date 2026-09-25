@@ -15,7 +15,7 @@ raise your score is to take food a rival did not.
 - Wire protocol: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
 - Watch: <https://softmax.com/hive>
 
-## A policy is just a prompt
+## Player policies
 
 Every ten seconds of sim time a colony sets one **doctrine** — nine integers, a
 target block and two strings — and the deterministic ant kernel runs it for all
@@ -40,6 +40,11 @@ coworld upload-policy coworld-hive:latest --name my-hive \
 
 `PLAYER_SCRIPTED=marcher` or `PLAYER_SCRIPTED=driftling` plays a built-in
 baseline instead — same image, same doctrine schema, no LLM.
+
+An ordinary player can also send doctrine decisions through the authenticated
+player socket. Build `Dockerfile.ordinary-player`; set `HIVE_JEV=1` to let Jev
+choose between complete marcher and driftling doctrines, or package a trained
+adapter and set `HIVE_ADAPTER_DIR`. See [training](docs/TRAINING.md).
 
 ## What a spectator sees
 

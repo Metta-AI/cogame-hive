@@ -9,13 +9,14 @@ frames. Replay bytes are strict UTF-8 JSON, `hive.replay.v1`.
 `WS /player?slot=N&token=T`. A bad slot or token is **403**; a duplicate
 connection on a live slot is **409**.
 
-### player → game (exactly one frame)
+### player → game
 
 ```json
 {"type": "register",
  "prompt": "<strategy text or empty>",
  "scripted": "marcher" | "driftling" | null,
- "policy": "<free label, <=48 runes>"}
+ "policy": "<free label, <=48 runes>",
+ "external": true | false}
 ```
 
 `src/hive_player.nim` reads `COWORLD_PLAYER_WS_URL`, `PLAYER_PROMPT`,
@@ -27,9 +28,23 @@ registers with neither field, is treated as `scripted: "marcher"`.
 **truncated** at the transport, not rejected, and is never written to the
 replay or the results.
 
-**Decisions are made server-side.** The game holds the LLM client and asks
-every seat's prompt for one doctrine per turn, all four seats in one parallel
-batch. The player container is informational after registration.
+Game-hosted prompt policies use one parallel model batch per turn. The bundled
+player only registers and receives. An `external: true` player receives the
+same private system and user prompts through this socket, plus complete
+marcher and driftling candidate doctrines. It returns one JSON text frame:
+
+```json
+{"type":"decision","turn":7,"action":{"scouts":15,"trail_gain":78,
+ "poach":12,"spread":32,"lay_food":88,"lay_home":52,"recall":false,
+ "focus":[9,5],"focus_weight":70,"note":"pump","say":""}}
+```
+
+The game parses and repairs the action using its existing doctrine parser,
+then records it in the replay. It sends `decision_result` with an `accepted`
+boolean before the informational `turn` frame. Missing or invalid decisions
+are retried once, then fall back to marcher. All external requests are sent
+before the game waits for any seat. Candidate doctrines use only that seat's
+view, so they preserve the private observation boundary.
 
 ### game → player
 
@@ -42,6 +57,15 @@ batch. The player container is informational after registration.
 ```json
 {"type": "turn", "turn": 7, "tick": 1680, "colony": "Amber",
  "view": { … }, "doctrine_source": "llm"}
+```
+
+```json
+{"type":"decision_request","turn":7,"system":"...","user":"...",
+ "candidates":[{...marcher doctrine...},{...driftling doctrine...}]}
+```
+
+```json
+{"type":"decision_result","turn":7,"accepted":true}
 ```
 
 ```json

@@ -3,8 +3,8 @@
 ## DOCTRINE - nine integers, a target block and two strings - every ten
 ## seconds of sim time.
 ##
-## Decisions are simultaneous by rule, so all four requests go out as ONE
-## PARALLEL BATCH (`curly.makeRequests`, bullwhip's `decideAll` shape);
+## Decisions are simultaneous by rule, so game-hosted model requests go out
+## as ONE PARALLEL BATCH (`curly.makeRequests`, bullwhip's `decideAll` shape);
 ## failed seats are retried once as a smaller batch - with a "your reply was
 ## invalid" hint only when the model actually replied with something
 ## unusable, and after a short backoff when the provider throttled or errored
@@ -317,7 +317,8 @@ proc decideAll*(
   prompts: array[Colonies, string],
   scripted: array[Colonies, ScriptKind],
   memory: var array[Colonies, BaselineMemory],
-  turn: int
+  turn: int,
+  external: array[Colonies, bool] = [false, false, false, false]
 ): array[Colonies, SeatOutcome] =
   ## One doctrine per seat. NEVER raises and never blocks unboundedly: at
   ## most two bounded batches, then the scripted layer.
@@ -332,7 +333,9 @@ proc decideAll*(
 
   var open: seq[int]
   for seat in 0 ..< Colonies:
-    if scripted[seat] != skNone or client.disabled or prompts[seat].len == 0:
+    if external[seat]:
+      discard
+    elif scripted[seat] != skNone or client.disabled or prompts[seat].len == 0:
       result[seat] = SeatOutcome(
         resolved: scriptedResolved(views[seat],
           (if scripted[seat] == skNone: skMarcher else: scripted[seat]),
