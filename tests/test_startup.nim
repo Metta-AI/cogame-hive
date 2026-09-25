@@ -87,10 +87,10 @@ proc main() =
       env = {"PATH": getEnv("PATH"),
              "COWORLD_PLAYER_WS_URL":
                "ws://127.0.0.1:9/player?slot=0&token=t"}.newStringTable)
-    check("marcher baseline" in run.output,
-      "an unconfigured seat announces it is registering as the marcher")
+    check("using the marcher baseline" in run.output,
+      "an unconfigured seat announces its marcher policy")
     checkEqual(run.exitCode, 0, "and it still exits 0 on an unreachable game")
-    report("a seat that sets neither env var registers as the marcher")
+    report("an unconfigured player executes the marcher policy")
 
   block playerReceiveLoopIsBounded:
     ## Checklist item 5: no unbounded loop, no blocking read. The receive

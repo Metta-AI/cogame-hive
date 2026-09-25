@@ -2,10 +2,9 @@
 
 Build `Dockerfile.ordinary-player` and seat the image through the normal
 Coworld player interface. The certification fixture keeps its bundled
-marcher players. An ordinary player registers `external: true` on the same
-authenticated JSON WebSocket. Each turn it receives the game's exact private
-system and user prompts and two complete doctrine candidates. The game
-parses and records its returned doctrine through the existing replay path.
+marcher players. An ordinary player uses the same authenticated JSON WebSocket.
+Each turn it receives a private view and constructs its own prompt and complete
+doctrine candidates. The game parses and records its returned doctrine.
 
 The default player chooses marcher. `HIVE_JEV=1` asks Jev through the System
 One sidecar to choose between marcher and driftling. `HIVE_ADAPTER_DIR` loads
@@ -20,7 +19,7 @@ writes results. Export at least two complete seed runs:
 ```sh
 python3 players/ordinary/export.py /tmp/hive-dataset \
   /tmp/hive-run-14 /tmp/hive-run-15 \
-  --source-revision <game-source-sha> --source canned
+  --source-revision <game-source-sha> --source scripted
 ```
 
 The exporter splits whole seeds into train and validation, rejects deadline
@@ -33,7 +32,7 @@ nim c -d:release --path:src -o:/tmp/hive-posttrain tools/export_posttrain.nim
 ```
 
 The other certified variant is `sprint`. Both methods emit Metta
-post-training JSONL with exact hosted prompts and complete accepted actions.
+post-training JSONL with player-constructed prompts and complete accepted actions.
 From a Metta checkout with the post-training package installed:
 
 ```sh

@@ -378,16 +378,7 @@ def main() -> None:
                 "type": "game",
                 "image": image,
                 "run": ["/bin/hive"],
-                # The hosted game holds the LLM client, so the Coworld secret
-                # is injected here. Offline (local certify, the docker smoke)
-                # the URI does not resolve, the client disables itself on
-                # first discovery and every seat falls back to the scripted
-                # doctrine - which is why certification passes with no
-                # credentials at all.
-                "env": {
-                    "ANTHROPIC_API_KEY_URI":
-                        "secret://coworld/hive/anthropic_api_key"
-                },
+                "env": {},
                 "source_url": source_url,
             },
             "replay_viewer": {"bundle": "static-replay-viewer"},
@@ -428,10 +419,9 @@ def main() -> None:
                     "The scripted marcher: opens wide with scouts near 60 and "
                     "a weak trail, inverts to a hard pump the moment a cache "
                     "shows up in its sources list, and recalls for one turn "
-                    "when deliveries collapse. Registers its seat as "
-                    "rule-based, so the game server plays it "
-                    "deterministically with no LLM. It is also the fallback "
-                    "every LLM seat lands on."
+                    "when deliveries collapse. It reads its private view "
+                    "and sends one doctrine on each turn. The game uses "
+                    "marcher when a player misses its deadline."
                 ),
                 "image": image,
                 "run": ["/bin/hive-player"],

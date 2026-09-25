@@ -215,6 +215,9 @@ jobs:
       - name: Build ordinary player image
         run: docker build --platform=linux/amd64 -f Dockerfile.ordinary-player -t "${IMAGE}-ordinary:ci" .
 
+      - name: Ordinary player policy tests
+        run: docker run --rm --platform=linux/amd64 -v "$PWD/players/ordinary/test_policy.py:/player/test_policy.py:ro" "${IMAGE}-ordinary:ci" python -m unittest test_policy -v
+
       - name: Ordinary player episode smoke
         env:
           SMOKE_ORDINARY_IMAGE: ${{ env.IMAGE }}-ordinary:ci

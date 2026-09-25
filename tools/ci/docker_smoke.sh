@@ -40,9 +40,6 @@
 #                              job loads it in a real browser -- that is the
 #                              only replay in CI that is known to be readable
 #                              by this game's own viewer.
-#   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
-#                              is exercised; if unset the game must fall back
-#                              to its scripted baselines and still complete
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -194,12 +191,6 @@ chmod 777 "${work_dir}"
 docker network create "${network}" >/dev/null
 
 game_env=()
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  game_env+=(-e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}")
-  echo "ANTHROPIC_API_KEY present: the LLM path will be exercised"
-else
-  echo "no ANTHROPIC_API_KEY: the game must complete on its scripted baselines"
-fi
 
 echo "starting game container (${image} ${game_bin}) ..."
 docker run -d --name "${prefix}-game" \
@@ -274,11 +265,11 @@ replay = json.loads((work / "replay.json").read_text())
 with zipfile.ZipFile(work / "policy_artifact_0.zip") as archive:
     trajectory = json.loads(archive.read("trajectory.json"))
 assert results["reason"] == "complete"
-assert results["policy_kinds"][0] == "external"
+assert results["policy_kinds"][0] == "scripted"
 assert trajectory["scores"] == results["scores"]
 assert trajectory["decisions"]
-assert all(row["source"] == "canned" for row in trajectory["decisions"])
-assert sum(row["source"] == "external" for row in replay["doctrines"]) == len(trajectory["decisions"])
+assert all(row["source"] == "scripted" for row in trajectory["decisions"])
+assert sum(row["source"] == "scripted" for row in replay["doctrines"] if row["seat"] == 0) == len(trajectory["decisions"])
 print(f"ordinary player accepted {len(trajectory['decisions'])} doctrines")
 PY
 fi

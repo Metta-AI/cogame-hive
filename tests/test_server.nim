@@ -171,7 +171,7 @@ proc main() =
     check(welcome.isSome, "the seat receives a welcome frame")
     let hello = parseJson(welcome.get().data)
     checkEqual(hello["type"].getStr(), "welcome", "the frame is a welcome")
-    checkEqual(hello["protocol"].getStr(), "hive.player.v1", "protocol")
+    checkEqual(hello["protocol"].getStr(), "hive.player.v2", "protocol")
     checkEqual(hello["slot"].getInt(), 0, "the slot is echoed")
     check(hello["colony"].getStr() in ["Amber", "Teal", "Lime", "Magenta"],
       "the welcome names a colony ALIAS, never a player")
