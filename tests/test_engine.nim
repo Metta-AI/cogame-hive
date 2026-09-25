@@ -180,6 +180,25 @@ proc main() =
         check(event{"note"}.getStr().len > 0, "with real note content")
     report("all four seats' calls go out as one parallel batch per turn")
 
+  block ordinarySeatKeepsModelBatchTogether:
+    records.setLen(0)
+    let client = enabledClient()
+    client.sendBatch = fakeGood
+    let match = newSim(testConfig(240, 42), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    var external: array[Colonies, bool]
+    external[0] = true
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted,
+      memory, 0, external)
+    checkEqual(records.len, 1, "model seats still use one batch")
+    checkEqual(records[0].size, 3,
+      "the ordinary seat is excluded from the model batch")
+    for seat in 1 ..< Colonies:
+      checkEqual(outcomes[seat].resolved.source, dsLlm,
+        "the other three seats still receive model decisions")
+    report("an ordinary seat leaves the other three model calls batched")
+
   block boundedRetryThenFallback:
     records.setLen(0)
     let client = enabledClient()
@@ -542,19 +561,24 @@ proc main() =
       checkEqual(seats.seats[seat].policyKind(), "scripted",
         "and is reported as scripted")
       check(not seats.seats[seat].everConnected, "and never connected")
-    seats.register(0, "", "", "")
+    seats.register(0, "", "")
     checkEqual(seats.seats[0].scripted, skMarcher,
       "registering with neither field is also the marcher")
-    seats.register(1, "raid the centre", "", "my-policy")
-    checkEqual(seats.seats[1].scripted, skNone, "a prompt makes it an LLM seat")
-    checkEqual(seats.seats[1].policyKind(), "llm", "reported as llm")
-    seats.register(2, "", "driftling", "")
+    seats.register(1, "", "my-policy", true)
+    checkEqual(seats.seats[1].scripted, skNone, "a player chooses its policy")
+    checkEqual(seats.seats[1].policyKind(), "external", "reported as external")
+    seats.register(2, "driftling", "")
     checkEqual(seats.seats[2].scripted, skDriftling, "PLAYER_SCRIPTED wins")
+    seats.register(3, "", "ordinary", true)
+    checkEqual(seats.seats[3].policyKind(), "external",
+      "an ordinary player is registered as an external doctrine source")
+    checkEqual(seats.seats[3].scripted, skNone,
+      "an external seat does not become a scripted seat")
     report("an unregistered seat plays the marcher for the whole match")
 
   block disconnectDegradesAndRevives:
     var seats = initRoster(@["t0", "t1", "t2", "t3"])
-    seats.register(0, "raid the centre", "", "")
+    seats.register(0, "", "", true)
     checkEqual(seats.authorize(0, "t0"), jeNone, "a good token is accepted")
     seats.seats[0].connected = true
     checkEqual(seats.authorize(0, "t0"), jeDuplicate,
@@ -564,30 +588,22 @@ proc main() =
     ## The server's rule: a disconnected seat degrades to the marcher.
     proc effective(seat: Seat): ScriptKind =
       if seat.connected: seat.scripted else: skMarcher
-    checkEqual(effective(seats.seats[0]), skNone, "connected: the LLM plays")
+    checkEqual(effective(seats.seats[0]), skNone, "connected: the player plays")
     seats.seats[0].connected = false
     checkEqual(effective(seats.seats[0]), skMarcher,
       "disconnected: the doctrine source degrades to the marcher")
     seats.seats[0].connected = true
     checkEqual(effective(seats.seats[0]), skNone, "and revives on reconnect")
-    checkEqual(seats.seats[0].prompt, "raid the centre",
-      "the prompt survives the disconnect")
     report("a mid-match disconnect degrades to the marcher and revives")
 
   block policyRuneCap:
     var seats = initRoster(@["t0", "t1", "t2", "t3"])
-    seats.register(0, "p", "", repeat("\u{1F41C}", 80))
+    seats.register(0, "", repeat("\u{1F41C}", 80))
     checkEqual(seats.seats[0].policyLabel.runeLen, MaxPolicyRunes,
       "register.policy caps at 48 RUNES")
     checkEqual(validateUtf8(seats.seats[0].policyLabel), -1,
       "and the cut lands on a rune boundary")
-    var longPrompt = repeat("\u{1F41C}", 5000)
-    seats.register(1, longPrompt, "", "")
-    checkEqual(seats.seats[1].prompt.runeLen, MaxPromptRunes,
-      "register.prompt is truncated at 4000 runes, not rejected")
-    checkEqual(validateUtf8(seats.seats[1].prompt), -1,
-      "and stays valid UTF-8")
-    report("every recorded string is capped on rune boundaries")
+    report("recorded policy labels are capped on rune boundaries")
 
 main()
 echo "test_engine: all checks passed"

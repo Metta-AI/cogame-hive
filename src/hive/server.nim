@@ -18,10 +18,13 @@
 ##   WS  /player?slot=N&token=T    the player protocol
 ##   WS  /global                   spectator snapshots
 ##
-## Player protocol (hive.player.v1), all JSON text frames:
-##   player -> game: {"type":"register","prompt":"...","scripted":"marcher",
+## Player protocol (hive.player.v2), all JSON text frames:
+##   player -> game: {"type":"register","scripted":"marcher",
 ##                    "policy":"..."}
+##                   {"type":"decision","turn":N,"action":{...}}
 ##   game -> player: {"type":"welcome",...}
+##                   {"type":"decision_request","turn":N,...}
+##                   {"type":"decision_result","turn":N,"accepted":true}
 ##                   {"type":"turn","turn":N,"tick":T,"colony":"Amber",
 ##                    "view":{...},"doctrine_source":"llm"}
 ##                   {"done":true,"result":{...}}
@@ -31,12 +34,20 @@ import bitworld/runtime
 import curly
 import mummy, mummy/routers
 import types, config, field, doctrine, baselines, roster, sim, rules,
-  broadcast, global, llm, replay, state, events
+  broadcast, global, replay, state, events
 
 const
   ShutdownGraceSeconds* = 20.0
   DoneBroadcastSeconds* = 3.0
   PlayBudgetFraction* = 0.6
+  FirstAttemptSeconds = 14
+  RetryAttemptSeconds = 6
+
+type SeatOutcome = object
+  resolved: ResolvedDoctrine
+  cause: string
+  detail: string
+  attempts: int
 
 type
   GameState = object
@@ -45,6 +56,8 @@ type
     roster: Roster
     playerSockets: Table[int, WebSocket]
     socketSlots: Table[WebSocket, int]
+    pendingExternalTurn: int
+    externalReplies: array[Colonies, string]
     globalSockets: HashSet[WebSocket]
     started: bool
     finished: bool
@@ -223,8 +236,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## reported for the lowest offending slot only.
       declarePlayerFailure(missing[0], "player never connected")
 
-    let client = newLlmClient(
-      turnBudgetSeconds = gameConfig.turnBudgetSeconds)
     var memory: array[Colonies, BaselineMemory]
     var turnsLlm: array[Colonies, int]
     var fallbackTurns: array[Colonies, int]
@@ -239,20 +250,15 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
 
     let provide = proc (match: Sim, turn: int): array[Colonies,
         ResolvedDoctrine] {.closure.} =
-      var prompts: array[Colonies, string]
       var scripted: array[Colonies, ScriptKind]
+      var connected: array[Colonies, bool]
       withLock stateLock:
         for seat in 0 ..< Colonies:
-          prompts[seat] = game.roster.seats[seat].prompt
-          ## A seat that disconnected mid-match keeps playing: its doctrine
-          ## source degrades to the marcher and revives on reconnect.
-          scripted[seat] =
-            if game.roster.seats[seat].connected: game.roster.seats[seat].scripted
-            else: skMarcher
+          scripted[seat] = game.roster.seats[seat].scripted
+          connected[seat] = game.roster.seats[seat].connected
 
       ## Budget guard: settle early rather than overrun. Once it engages the
-      ## LLM is skipped for ALL remaining turns and the episode finishes on
-      ## the scripted layer, so it ends complete/full_time, not deadline.
+      ## Player requests are skipped for all remaining turns.
       let elapsed = epochTime() - gameStart
       if not guardEngaged and
           elapsed + 2.0 * gameConfig.turnBudgetSeconds > wallBudget:
@@ -271,7 +277,110 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             cause: "budget_guard"
           )
       else:
-        outcomes = client.decideAll(match, prompts, scripted, memory, turn)
+        var sockets: array[Colonies, WebSocket]
+        var requests: array[Colonies, JsonNode]
+        var marcher: array[Colonies, ResolvedDoctrine]
+        var waiting: seq[int]
+        let externalStarted = epochTime()
+        let turnDeadline = externalStarted + gameConfig.turnBudgetSeconds
+        withLock stateLock:
+          game.pendingExternalTurn = turn
+          game.externalReplies = ["", "", "", ""]
+          for seat in 0 ..< Colonies:
+            if connected[seat] and game.playerSockets.hasKey(seat):
+              sockets[seat] = game.playerSockets[seat]
+        for seat in 0 ..< Colonies:
+          let view = buildView(match, seat)
+          marcher[seat] = scriptedResolved(view, skMarcher, turn,
+            memory[seat])
+          if not connected[seat]:
+            outcomes[seat] = SeatOutcome(resolved: marcher[seat],
+              cause: "timeout", detail: "player disconnected")
+            outcomes[seat].resolved.source = dsFallback
+            continue
+          requests[seat] = %*{
+            "type": "decision_request", "turn": turn,
+            "view": view
+          }
+          waiting.add(seat)
+          try:
+            sockets[seat].send($requests[seat])
+          except CatchableError:
+            discard
+
+        for attempt in 1 .. 2:
+          if waiting.len == 0:
+            break
+          if attempt == 2:
+            for seat in waiting:
+              requests[seat]["retry"] = %true
+              try:
+                sockets[seat].send($requests[seat])
+              except CatchableError:
+                discard
+          let attemptDeadline = min(turnDeadline,
+            if attempt == 1: externalStarted + FirstAttemptSeconds.float
+            else: epochTime() + RetryAttemptSeconds.float)
+          while epochTime() < attemptDeadline:
+            var complete = true
+            withLock stateLock:
+              for seat in waiting:
+                if game.externalReplies[seat].len == 0:
+                  complete = false
+            if complete:
+              break
+            sleep(10)
+          var retry: seq[int]
+          for seat in waiting:
+            var raw: string
+            withLock stateLock:
+              raw = game.externalReplies[seat]
+              game.externalReplies[seat] = ""
+            if raw.len == 0:
+              outcomes[seat] = SeatOutcome(cause: "timeout",
+                detail: "external player did not answer the turn",
+                attempts: attempt)
+              retry.add(seat)
+              continue
+            try:
+              let payload = parseJson(raw)
+              if payload{"type"}.getStr() != "decision" or
+                  payload{"turn"}.getInt(-1) != turn:
+                raise newException(HiveError,
+                  "external decision differs from the pending turn")
+              let colony = match.seatNest[seat]
+              let parsed = parseDoctrine($payload["action"],
+                match.doctrines[colony], match.hasDoctrine[colony])
+              let source = payload{"source"}.getStr()
+              if source notin ["scripted", "jev", "llm", "trained"]:
+                raise newException(HiveError, "unknown player source")
+              outcomes[seat] = SeatOutcome(
+                resolved: ResolvedDoctrine(doctrine: parsed,
+                  source: (if source == "scripted": dsScripted
+                    elif source in ["jev", "llm"]: dsLlm else: dsExternal),
+                  latencyMs: int((epochTime() - externalStarted) * 1000.0)),
+                attempts: attempt)
+            except CatchableError as error:
+              outcomes[seat] = SeatOutcome(cause: "parse_error",
+                detail: truncateRunes(error.msg, MaxDetailRunes),
+                attempts: attempt)
+              retry.add(seat)
+          waiting = retry
+        for seat in waiting:
+          outcomes[seat].resolved = marcher[seat]
+          outcomes[seat].resolved.source = dsFallback
+        withLock stateLock:
+          game.pendingExternalTurn = -1
+
+        for seat in 0 ..< Colonies:
+          if connected[seat]:
+            try:
+              sockets[seat].send($(%*{
+                "type": "decision_result", "turn": turn,
+                "accepted": outcomes[seat].cause.len == 0
+              }))
+            except CatchableError:
+              discard
 
       for seat in 0 ..< Colonies:
         result[seat] = outcomes[seat].resolved
@@ -285,7 +394,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             truncateRunes(outcomes[seat].detail, MaxDetailRunes)))
 
       ## Push the informational turn frame to every connected seat. The seat
-      ## is not required to answer; decisions are made server-side.
+      ## is not required to answer; decisions arrived on the player socket.
       withLock stateLock:
         for seat in 0 ..< Colonies:
           if game.playerSockets.hasKey(seat):
@@ -301,6 +410,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
 
     var results: JsonNode
     var replayBytes: string
+    var hasExternalPlayer = false
     try:
       game.match.runEpisode(provide, outOfTime)
     except CatchableError as error:
@@ -315,6 +425,9 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           if seat < game.config.players.len: game.config.players[seat].name
           else: "P" & $(seat + 1))
         kinds.add(game.roster.seats[seat].policyKind())
+        if game.roster.seats[seat].external and
+            game.roster.seats[seat].connected:
+          hasExternalPlayer = true
       results = resultsJson(game.match, names, kinds, turnsLlm,
         fallbackTurns, fallbackCauses)
       replayBytes = $buildReplay(game.match, names, kinds, results)
@@ -343,6 +456,9 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           echo "hive: done broadcast to slot ", slot, " took longer than its ",
             DoneBroadcastSeconds, "s deadline"
       broadcastGlobalLocked()
+
+    if hasExternalPlayer:
+      sleep(500)
 
     echo "hive: episode ", $game.match.reason, "/", $game.match.rule,
       " at tick ", game.match.tick, " after ",
@@ -468,7 +584,7 @@ proc playerUpgradeHandler(request: Request) {.gcsafe.} =
         game.playerSockets.len, "/", Colonies, ")"
       websocket.send($ %*{
         "type": "welcome",
-        "protocol": "hive.player.v1",
+        "protocol": "hive.player.v2",
         "slot": slot,
         "colony": game.match.meadow.nests[colony].alias,
         "colour": game.match.meadow.nests[colony].colour,
@@ -517,11 +633,16 @@ proc websocketHandler(
               (if scriptedNode.getBool(): "marcher" else: "")
             else: scriptedNode.getStr()
           withLock stateLock:
-            game.roster.register(slot, payload{"prompt"}.getStr(), scripted,
-              payload{"policy"}.getStr())
+            game.roster.register(slot, scripted,
+              payload{"policy"}.getStr(), true)
             echo "hive: slot ", slot, " registered (",
-              game.roster.seats[slot].policyKind(), ", ",
-              payload{"prompt"}.getStr().len, " prompt chars)"
+              game.roster.seats[slot].policyKind(), ")"
+        elif payload{"type"}.getStr() == "decision" and
+            message.data.len <= 8192:
+          withLock stateLock:
+            if game.pendingExternalTurn == payload{"turn"}.getInt(-1) and
+                game.roster.seats[slot].connected:
+              game.externalReplies[slot] = message.data
       except CatchableError as error:
         echo "hive: ignoring bad player frame: ", error.msg
     of ErrorEvent:
@@ -571,6 +692,7 @@ proc runGameServer*(gameConfig: GameConfig, runtimeConfig: RuntimeConfig) =
   game.config = gameConfig
   game.match = newSim(gameConfig, meadow)
   game.roster = initRoster(gameConfig.tokens)
+  game.pendingExternalTurn = -1
 
   let router = buildRouter(replayMode = false)
   gameServer = newServer(router, websocketHandler, workerThreads = 4)

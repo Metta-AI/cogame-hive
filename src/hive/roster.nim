@@ -21,8 +21,8 @@ type
   Seat* = object
     connected*: bool
     everConnected*: bool
-    prompt*: string
     scripted*: ScriptKind
+    external*: bool
     policyLabel*: string
     registered*: bool
 
@@ -33,8 +33,7 @@ type
 proc initRoster*(tokens: seq[string]): Roster =
   result.tokens = tokens
   for seat in 0 ..< Colonies:
-    ## A seat that never registers, or registers with neither field, is
-    ## treated as `scripted: "marcher"`.
+    ## A seat that never registers plays marcher as the game fallback.
     result.seats[seat] = Seat(scripted: skMarcher, policyLabel: "")
 
 proc authorize*(roster: Roster, slot: int, token: string): JoinError =
@@ -49,24 +48,21 @@ proc authorize*(roster: Roster, slot: int, token: string): JoinError =
 proc register*(
   roster: var Roster,
   slot: int,
-  prompt, scripted, policy: string
+  scripted, policy: string,
+  external = false
 ) =
-  ## The only frame a player container must send. Over-long prompts are
-  ## TRUNCATED at the transport, not rejected, and never written to the
-  ## replay or the results.
   if slot < 0 or slot >= Colonies:
     return
-  var text = prompt
-  if text.runeLen > MaxPromptRunes:
-    text = text.runeSubStr(0, MaxPromptRunes)
   let kind = parseScriptKind(scripted)
-  roster.seats[slot].prompt = text
+  roster.seats[slot].external = external
   roster.seats[slot].scripted =
     if kind != skNone: kind
-    elif text.strip().len > 0: skNone
+    elif external: skNone
     else: skMarcher
   roster.seats[slot].policyLabel = truncatePolicy(policy)
   roster.seats[slot].registered = true
 
 proc policyKind*(seat: Seat): string =
-  if seat.scripted == skNone: "llm" else: "scripted"
+  if seat.scripted != skNone: "scripted"
+  elif seat.external: "external"
+  else: "llm"

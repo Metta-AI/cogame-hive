@@ -31,6 +31,8 @@
 #   SMOKE_REQUIRE_REPLAY_JSON  1 = replay must parse as JSON    (1)
 #                              set 0 for binary replay formats
 #   SMOKE_EXTRA_ENV            extra "K=V K=V" for every player (empty)
+#   SMOKE_ORDINARY_IMAGE       optional ordinary player image for slot 0;
+#                              checks its accepted-decision artifact
 #   SMOKE_REPLAY_OUT           where to COPY the replay this smoke produced,
 #                              so it outlives the scratch dir the trap deletes
 #                              (dist/smoke/replay.json). ci.yml uploads it as
@@ -38,15 +40,13 @@
 #                              job loads it in a real browser -- that is the
 #                              only replay in CI that is known to be readable
 #                              by this game's own viewer.
-#   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
-#                              is exercised; if unset the game must fall back
-#                              to its scripted baselines and still complete
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "${script_dir}/../.." && pwd)"
 
 image="${1:-${SMOKE_IMAGE:-coworld-hive:ci}}"
+ordinary_image="${SMOKE_ORDINARY_IMAGE:-}"
 slug="${SMOKE_SLUG:-hive}"
 game_bin="${SMOKE_GAME_BIN:-/bin/${slug}}"
 player_bin="${SMOKE_PLAYER_BIN:-/bin/${slug}-player}"
@@ -191,12 +191,6 @@ chmod 777 "${work_dir}"
 docker network create "${network}" >/dev/null
 
 game_env=()
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  game_env+=(-e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}")
-  echo "ANTHROPIC_API_KEY present: the LLM path will be exercised"
-else
-  echo "no ANTHROPIC_API_KEY: the game must complete on its scripted baselines"
-fi
 
 echo "starting game container (${image} ${game_bin}) ..."
 docker run -d --name "${prefix}-game" \
@@ -214,10 +208,21 @@ docker run -d --name "${prefix}-game" \
 for ((slot = 0; slot < seats; slot++)); do
   eval "penv=( $(cat "${work_dir}/env-${slot}.args") )"
   eval "pcmd=( $(cat "${work_dir}/cmd-${slot}.args") )"
+  player_image="${image}"
+  player_mount=()
+  if [[ "${slot}" == "0" && -n "${ordinary_image}" ]]; then
+    player_image="${ordinary_image}"
+    pcmd=(python player.py)
+    penv=(-e HIVE_CAPTURE_TRAINING=1
+      -e "HIVE_SOURCE_REVISION=${GITHUB_SHA:-local-smoke}"
+      -e COWORLD_PLAYER_ARTIFACT_UPLOAD_URL=file:///coworld-artifact/policy_artifact_0.zip)
+    player_mount=(-v "${work_dir}:/coworld-artifact:rw")
+  fi
   docker run -d --name "${prefix}-p${slot}" --network "${network}" \
     -e COWORLD_PLAYER_WS_URL="ws://${prefix}-game:${port}/player?slot=${slot}&token=token-${slot}" \
     ${penv[@]+"${penv[@]}"} \
-    "${image}" ${pcmd[@]+"${pcmd[@]}"} >/dev/null
+    ${player_mount[@]+"${player_mount[@]}"} \
+    "${player_image}" ${pcmd[@]+"${pcmd[@]}"} >/dev/null
 done
 
 # --------------------------------------------------------------------------
@@ -239,6 +244,34 @@ if [ "${exit_code}" != "0" ]; then
   echo "FAIL: game container exited ${exit_code}" >&2
   dump_logs
   exit 1
+fi
+
+if [ -n "${ordinary_image}" ]; then
+  ordinary_exit="$(docker inspect -f '{{.State.ExitCode}}' "${prefix}-p0")"
+  if [ "${ordinary_exit}" != "0" ]; then
+    echo "FAIL: ordinary player exited ${ordinary_exit}" >&2
+    dump_logs
+    exit 1
+  fi
+  python3 - "${work_dir}" <<'PY'
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+work = Path(sys.argv[1])
+results = json.loads((work / "results.json").read_text())
+replay = json.loads((work / "replay.json").read_text())
+with zipfile.ZipFile(work / "policy_artifact_0.zip") as archive:
+    trajectory = json.loads(archive.read("trajectory.json"))
+assert results["reason"] == "complete"
+assert results["policy_kinds"][0] == "scripted"
+assert trajectory["scores"] == results["scores"]
+assert trajectory["decisions"]
+assert all(row["source"] == "scripted" for row in trajectory["decisions"])
+assert sum(row["source"] == "scripted" for row in replay["doctrines"] if row["seat"] == 0) == len(trajectory["decisions"])
+print(f"ordinary player accepted {len(trajectory['decisions'])} doctrines")
+PY
 fi
 
 # --------------------------------------------------------------------------

@@ -51,12 +51,13 @@ strict JSON parser, which is exactly the bug that loses a replay.
 
 ## LLM calls
 
-All four seats' calls go out as **one parallel batch per turn**
-(`curly.makeRequests`). Never query seats sequentially — the episode budget
-does not survive it. Every wait is bounded: 14 s, then one 6 s retry, then the
-`marcher` doctrine and a `fallback` event. The budget guard at the top of each
-turn drops the whole remaining match to the scripted layer rather than
-overrunning.
+All game-hosted model seats' calls go out as **one parallel batch per turn**
+(`curly.makeRequests`). External player requests go to every participating
+seat before the server waits for any reply. Never query seats sequentially —
+the episode budget does not survive it. Every wait is bounded: 14 s, then one
+6 s retry, then the `marcher` doctrine and a `fallback` event. The budget
+guard at the top of each turn drops the whole remaining match to the scripted
+layer rather than overrunning.
 
 ## Chrome
 

@@ -165,6 +165,7 @@ proc parseReplayBytes*(bytes: string): ReplayData =
           (case record{"source"}.getStr("scripted")
            of "llm": dsLlm
            of "fallback": dsFallback
+           of "external": dsExternal
            else: dsScripted),
         latencyMs: record{"latency_ms"}.getInt(0)
       )

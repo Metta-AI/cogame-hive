@@ -15,13 +15,12 @@ raise your score is to take food a rival did not.
 - Wire protocol: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
 - Watch: <https://softmax.com/hive>
 
-## A policy is just a prompt
+## Player policies
 
 Every ten seconds of sim time a colony sets one **doctrine** — nine integers, a
 target block and two strings — and the deterministic ant kernel runs it for all
-twenty-four bodies at 24 Hz. The LLM is the queen at 0.1 Hz; the kernel is the
-colony at 24 Hz. Ninety-six bodies are driven by eighty LLM calls in a whole
-episode.
+twenty-four bodies at 24 Hz. A player makes one decision per turn from its
+private view. A full episode has twenty turns per seat.
 
 ```json
 {"scouts": 15, "trail_gain": 78, "poach": 12, "spread": 32,
@@ -31,15 +30,23 @@ episode.
  "say": "west road, full pump"}
 ```
 
-To field your own colony mind, reuse the image and set `PLAYER_PROMPT`:
+The bundled `/bin/hive-player` reads each private view and sends a scripted
+doctrine. `PLAYER_SCRIPTED=marcher` and `PLAYER_SCRIPTED=driftling` select its
+two baselines. The game validates actions, advances the simulation, and writes
+the replay.
+
+To field a prompt policy, build `Dockerfile.ordinary-player` and set
+`PLAYER_PROMPT` and `ANTHROPIC_API_KEY` on that player:
 
 ```bash
-coworld upload-policy coworld-hive:latest --name my-hive \
-  --run /bin/hive-player --secret-env PLAYER_PROMPT="<your strategy>"
+coworld upload-policy coworld-hive-ordinary-player:latest --name my-hive \
+  --run "python player.py" --secret-env PLAYER_PROMPT="<your strategy>"
 ```
 
-`PLAYER_SCRIPTED=marcher` or `PLAYER_SCRIPTED=driftling` plays a built-in
-baseline instead — same image, same doctrine schema, no LLM.
+The Python player also supports `HIVE_JEV=1` to let Jev choose between complete
+marcher and driftling doctrines, or `HIVE_ADAPTER_DIR` for a trained adapter.
+All three backends use the same private view and doctrine action. See
+[training](docs/TRAINING.md).
 
 ## What a spectator sees
 
@@ -61,9 +68,9 @@ contacted.
 
 ```
 src/hive.nim              entrypoint (live server / replay server)
-src/hive_player.nim       the player: register, listen, exit
+src/hive_player.nim       bundled scripted player
 src/hive/                 types, config, field, pheromones, ants, sources,
-                          sim, rules, doctrine, baselines, llm, state, roster,
+                          sim, rules, doctrine, baselines, state, roster,
                           events, labels, broadcast, global, render, replay,
                           server
 replay-viewer/            hive_replay.nim (the wasm module) + the shell

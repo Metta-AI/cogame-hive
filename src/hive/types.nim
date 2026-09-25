@@ -126,6 +126,7 @@ type
     dsLlm = "llm"
     dsScripted = "scripted"
     dsFallback = "fallback"
+    dsExternal = "external"
 
   ResolvedDoctrine* = object
     doctrine*: Doctrine

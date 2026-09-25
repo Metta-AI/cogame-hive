@@ -1,40 +1,51 @@
 # Hive — wire protocol
 
-Two channels: the player websocket (`hive.player.v1`) and the spectator
+Two channels: the player websocket (`hive.player.v2`) and the spectator
 channel (`hive.global.v1`, plus the static replay bundle). Both are JSON text
 frames. Replay bytes are strict UTF-8 JSON, `hive.replay.v1`.
 
-## Player channel — `hive.player.v1`
+## Player channel — `hive.player.v2`
 
 `WS /player?slot=N&token=T`. A bad slot or token is **403**; a duplicate
 connection on a live slot is **409**.
 
-### player → game (exactly one frame)
+### player → game
 
 ```json
 {"type": "register",
- "prompt": "<strategy text or empty>",
  "scripted": "marcher" | "driftling" | null,
  "policy": "<free label, <=48 runes>"}
 ```
 
-`src/hive_player.nim` reads `COWORLD_PLAYER_WS_URL`, `PLAYER_PROMPT`,
-`PLAYER_SCRIPTED` and `PLAYER_POLICY_LABEL`, sends that frame, then receives
-until `{"done": true, …}` and exits 0. A seat that never registers, or
-registers with neither field, is treated as `scripted: "marcher"`.
+`src/hive_player.nim` reads `COWORLD_PLAYER_WS_URL`, `PLAYER_SCRIPTED` and
+`PLAYER_POLICY_LABEL`, sends that frame, then answers each `decision_request`
+from its private view. A seat that never connects plays the game fallback.
 `PLAYER_SCRIPTED` parsing: `marcher` / `1` / `true` / `yes` → marcher,
-`driftling` → driftling, anything else → none. `prompt` over 4000 runes is
-**truncated** at the transport, not rejected, and is never written to the
-replay or the results.
+`driftling` → driftling, anything else → none. A strategy prompt stays inside
+the player container and never enters the game protocol.
 
-**Decisions are made server-side.** The game holds the LLM client and asks
-every seat's prompt for one doctrine per turn, all four seats in one parallel
-batch. The player container is informational after registration.
+The game sends one private observation to every connected player. The bundled
+Nim player executes marcher or driftling. The Python ordinary player constructs
+its own prompt and candidate doctrines from the observation, then invokes its
+configured prompt, Jev, or trained backend. Each returns one JSON text frame:
+
+```json
+{"type":"decision","turn":7,"action":{"scouts":15,"trail_gain":78,
+ "poach":12,"spread":32,"lay_food":88,"lay_home":52,"recall":false,
+ "focus":[9,5],"focus_weight":70,"note":"pump","say":""},
+ "source":"scripted"}
+```
+
+The game parses and repairs the action using its existing doctrine parser,
+then records it in the replay. It sends `decision_result` with an `accepted`
+boolean before the informational `turn` frame. Missing or invalid decisions
+are retried once, then fall back to marcher. All requests are sent before the
+game waits for any seat. The game never receives an inference credential.
 
 ### game → player
 
 ```json
-{"type": "welcome", "protocol": "hive.player.v1", "slot": 0,
+{"type": "welcome", "protocol": "hive.player.v2", "slot": 0,
  "colony": "Amber", "colour": "#f2c14e",
  "turns": 20, "turn_ticks": 240, "ants": 24}
 ```
@@ -42,6 +53,14 @@ batch. The player container is informational after registration.
 ```json
 {"type": "turn", "turn": 7, "tick": 1680, "colony": "Amber",
  "view": { … }, "doctrine_source": "llm"}
+```
+
+```json
+{"type":"decision_request","turn":7,"view":{...private observation...}}
+```
+
+```json
+{"type":"decision_result","turn":7,"accepted":true}
 ```
 
 ```json
@@ -125,8 +144,7 @@ replay never depends on re-running the repair.
 
 Three further caps on strings that reach the replay: `register.policy`
 ≤ 48 runes, any recorded error text (`fallback.detail`) ≤ 200 runes, and
-`register.prompt` ≤ 4000 runes at the transport. **Truncation is on rune
-boundaries, never bytes.**
+**Truncation is on rune boundaries, never bytes.**
 
 ## Results document (closed schema)
 
@@ -137,7 +155,7 @@ All per-seat arrays are length 4 in **slot** order.
  "aliases": ["Amber", "Magenta", "Teal", "Lime"],
  "colours": ["#f2c14e", "#e26db5", "#4ecdc4", "#9fd356"],
  "nests": [[16,12], [143,75], [143,12], [16,75]],
- "policy_kinds": ["llm", "llm", "scripted", "scripted"],
+ "policy_kinds": ["external", "external", "scripted", "scripted"],
  "scores": [0.31692, 0.28154, 0.22231, 0.17923],
  "win": [true, false, false, false],
  "delivered": [412, 366, 289, 233],
@@ -173,20 +191,16 @@ first five still finds them where they were:
 | `cause` | Meaning |
 |---|---|
 | `timeout` | no reply arrived inside the attempt deadline, or the per-turn budget ran out before the seat could be asked |
-| `parse_error` | the model replied, but no doctrine object could be recovered from the text |
-| `transport_error` | the request never completed: DNS, connect or transport failure |
-| `no_credentials` | no LLM credentials, or the provider rejected them (401, or 403 on the last candidate model) |
-| `budget_guard` | the episode's wall-clock guard engaged; the LLM was not asked |
-| `throttled` | the sidecar or provider answered 429 (request-rate or token quota) |
-| `refusal` | the model refused to answer (`stop_reason: "refusal"`) |
-| `provider_error` | the provider answered 5xx, or rejected the request for this model (a Bedrock 403 while other candidates remain) |
+| `parse_error` | a player replied, but no doctrine object could be recovered from the action |
+| `transport_error` | reserved; provider transport is owned by the player |
+| `no_credentials` | reserved; credentials are owned by the player |
+| `budget_guard` | the episode's wall-clock guard engaged; no player was asked |
+| `throttled` | reserved; provider throttling is owned by the player |
+| `refusal` | reserved; model refusal is owned by the player |
+| `provider_error` | reserved; provider errors are owned by the player |
 
-Only `parse_error` means the prompt produced an unusable reply; the last three
-mean the model was never usefully asked. A `throttled` or `provider_error`
-first attempt backs off before the single retry (`retry-after` if the provider
-sent an integer one, else 2 s, capped at 4 s and clamped so the retry still
-fits the turn), and that retry re-sends the unmodified message rather than the
-"your previous reply was invalid" hint.
+The game retries a missing or invalid action once. Provider errors surface as
+missing player actions if the player cannot submit a doctrine.
 
 ## Spectator channel — `hive.global.v1`
 
@@ -259,6 +273,6 @@ write order is: broadcast `done` to every seat with a 3 s per-seat deadline →
 write the replay → write the results.
 
 The game container does **not** receive `COWORLD_TIMEOUT_SECONDS`; 1200 s is
-assumed. Every wait is bounded: two LLM attempt deadlines (14 s then 6 s), one
+assumed. Every wait is bounded: two player attempt deadlines (14 s then 6 s), one
 per-turn budget of 22 s, `playerConnectTimeoutSeconds` on the connect wait, a
 3 s per-seat deadline on the final done-broadcast, and a 660 s engine stop.

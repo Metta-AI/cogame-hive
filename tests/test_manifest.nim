@@ -76,10 +76,8 @@ proc main() =
       "the game entrypoint")
     checkEqual(game["runnable"]["type"].getStr(), "game",
       "game.runnable.type is required and must be 'game'")
-    checkEqual(game["runnable"]["env"]["ANTHROPIC_API_KEY_URI"].getStr(),
-      "secret://coworld/hive/anthropic_api_key",
-      "the hosted game is handed the Coworld secret; without it every seat " &
-      "plays scripted")
+    check(not game["runnable"]["env"].hasKey("ANTHROPIC_API_KEY_URI"),
+      "the game receives no inference credential")
     ## Bundled players live at the TOP level, not under `game`.
     check(not game.hasKey("player"), "game.player must NOT exist")
     check(manifest.hasKey("player") and manifest["player"].len >= 1,
