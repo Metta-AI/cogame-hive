@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import time
 import urllib.request
@@ -33,76 +32,24 @@ def choose(turn: dict, generator, marcher: ScriptedPolicy, driftling: ScriptedPo
         if not isinstance(action, dict):
             raise ValueError("trained Hive decision must be a JSON object")
         return action, "trained", system, user
-    if os.environ.get("HIVE_JEV") != "1":
-        if strategy:
-            body = json.dumps({"model": os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5"),
-                               "max_tokens": 500, "system": system,
-                               "messages": [{"role": "user", "content": user}]}).encode()
-            request = urllib.request.Request(
-                "https://api.anthropic.com/v1/messages", body,
-                {"Content-Type": "application/json", "anthropic-version": "2023-06-01",
-                 "x-api-key": os.environ["ANTHROPIC_API_KEY"]}, method="POST")
-            with urllib.request.urlopen(request, timeout=10) as response:
-                action = json.loads(json.load(response)["content"][0]["text"])
-            return action, "llm", system, user
-        return candidates[0], "scripted", system, user
-    sidecar = os.environ.get("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "").strip()
-    capture = os.environ.get("METTA_CAPTURE_URL", "").strip()
-    if sidecar:
-        endpoint, model, key = sidecar, "typesafe/jev-1.13", ""
-    elif capture:
-        endpoint = capture
-        model = os.environ.get("METTA_CAPTURE_MODEL", "jev-latest")
-        key = os.environ["METTA_CAPTURE_KEY"]
-    else:
-        endpoint = os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai")
-        model = os.environ.get("TYPESAFE_DEFAULT_MODEL", "jev-latest")
-        key = os.environ["TYPESAFE_API_KEY"]
-    criteria = {
-        str(index): json.dumps(candidate, sort_keys=True)
-        for index, candidate in enumerate(candidates)
-    }
-    body = json.dumps(
-        {
-            "model": model,
-            "state": {"policy": system, "summary": user},
-            "questions": {
-                "action": {
-                    "type": "choice",
-                    "instructions": "Choose one complete Hive doctrine.",
-                    "criteria": criteria,
-                }
-            },
-        }
-    ).encode()
-    headers = {"Content-Type": "application/json"}
-    if key:
-        headers["Authorization"] = "Bearer " + key
-    request = urllib.request.Request(
-        endpoint.rstrip("/") + "/v1/systemone", body, headers, method="POST"
-    )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        answer = json.load(response)["answers"]["action"]
-    if answer["type"] != "choice" or len(answer["probabilities"]) != len(candidates):
-        raise ValueError("Jev returned the wrong Hive decision catalog")
-    probabilities = [answer["probabilities"][str(i)] for i in range(len(candidates))]
-    if (
-        any(
-            not isinstance(p, (int, float)) or not math.isfinite(p) or p < 0 or p > 1
-            for p in probabilities
-        )
-        or abs(sum(probabilities) - 1) > len(candidates) * 0.005 + 1e-6
-    ):
-        raise ValueError("Jev returned invalid Hive decision probabilities")
-    return candidates[max(range(len(candidates)), key=probabilities.__getitem__)], "jev", system, user
+    if strategy:
+        body = json.dumps({"model": os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5"),
+                           "max_tokens": 500, "system": system,
+                           "messages": [{"role": "user", "content": user}]}).encode()
+        request = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages", body,
+            {"Content-Type": "application/json", "anthropic-version": "2023-06-01",
+             "x-api-key": os.environ["ANTHROPIC_API_KEY"]}, method="POST")
+        with urllib.request.urlopen(request, timeout=10) as response:
+            action = json.loads(json.load(response)["content"][0]["text"])
+        return action, "llm", system, user
+    return candidates[0], "scripted", system, user
 
 
 def main() -> None:
     url = os.environ["COWORLD_PLAYER_WS_URL"]
     slot = int(parse_qs(urlsplit(url).query)["slot"][0])
     adapter = os.environ.get("HIVE_ADAPTER_DIR")
-    if adapter and os.environ.get("HIVE_JEV") == "1":
-        raise ValueError("select one Hive policy backend")
     generator = None
     if adapter:
         from posttrain import TransformersGenerator
@@ -110,8 +57,7 @@ def main() -> None:
         generator = TransformersGenerator(Path(adapter))
     strategy = os.environ.get("PLAYER_PROMPT", "")
     scripted = os.environ.get("PLAYER_SCRIPTED", "")
-    backend = ("trained" if adapter else "jev" if os.environ.get("HIVE_JEV") == "1"
-               else "llm" if strategy else "scripted")
+    backend = ("trained" if adapter else "llm" if strategy else "scripted")
     if backend == "scripted" and not scripted:
         scripted = "marcher"
     marcher = ScriptedPolicy()
@@ -135,7 +81,6 @@ def main() -> None:
             time.sleep(0.25)
     socket.settimeout(120)
     socket.send(registration)
-    calls = 0
     pending: dict[int, tuple[str, str, dict, str]] = {}
     while True:
         opcode, data = socket.recv_data(control_frame=True)
@@ -157,8 +102,6 @@ def main() -> None:
             if frame["turn"] not in pending:
                 action, source, system, user = choose(
                     frame, generator, marcher, driftling, strategy, scripted)
-                if source == "jev":
-                    calls += 1
                 pending[frame["turn"]] = (system, user, action, source)
             _, _, action, source = pending[frame["turn"]]
             socket.send(json.dumps({"type": "decision", "turn": frame["turn"],
@@ -168,7 +111,7 @@ def main() -> None:
             if artifact and frame["accepted"]:
                 artifact.record(system, user, action, source, frame["turn"])
     socket.close()
-    print(f"Hive ordinary player finished: slot={slot} backend={backend} Jev calls={calls}", flush=True)
+    print(f"Hive ordinary player finished: slot={slot} backend={backend}", flush=True)
 
 
 if __name__ == "__main__":

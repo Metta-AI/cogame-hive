@@ -352,12 +352,12 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
               let parsed = parseDoctrine($payload["action"],
                 match.doctrines[colony], match.hasDoctrine[colony])
               let source = payload{"source"}.getStr()
-              if source notin ["scripted", "jev", "llm", "trained"]:
+              if source notin ["scripted", "external", "llm", "trained"]:
                 raise newException(HiveError, "unknown player source")
               outcomes[seat] = SeatOutcome(
                 resolved: ResolvedDoctrine(doctrine: parsed,
                   source: (if source == "scripted": dsScripted
-                    elif source in ["jev", "llm"]: dsLlm else: dsExternal),
+                    elif source == "llm": dsLlm else: dsExternal),
                   latencyMs: int((epochTime() - externalStarted) * 1000.0)),
                 attempts: attempt)
             except CatchableError as error:

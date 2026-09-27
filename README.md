@@ -43,9 +43,8 @@ coworld upload-policy coworld-hive-ordinary-player:latest --name my-hive \
   --run "python player.py" --secret-env PLAYER_PROMPT="<your strategy>"
 ```
 
-The Python player also supports `HIVE_JEV=1` to let Jev choose between complete
-marcher and driftling doctrines, or `HIVE_ADAPTER_DIR` for a trained adapter.
-All three backends use the same private view and doctrine action. See
+The Python player also supports `HIVE_ADAPTER_DIR` for a trained adapter.
+All backends use the same private view and doctrine action. See
 [training](docs/TRAINING.md).
 
 ## What a spectator sees
