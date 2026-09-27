@@ -1,6 +1,6 @@
 ## Hive's bundled scripted player. Each turn it reads its private view,
 ## computes a marcher or driftling doctrine, and submits it to the game.
-## Prompt, Jev, and trained backends use players/ordinary/player.py.
+## Prompt and trained backends use players/ordinary/player.py.
 
 import std/[json, options, os, strutils, times]
 import whisky

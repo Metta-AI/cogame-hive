@@ -27,7 +27,7 @@ the player container and never enters the game protocol.
 The game sends one private observation to every connected player. The bundled
 Nim player executes marcher or driftling. The Python ordinary player constructs
 its own prompt and candidate doctrines from the observation, then invokes its
-configured prompt, Jev, or trained backend. Each returns one JSON text frame:
+configured prompt or trained backend. Each returns one JSON text frame:
 
 ```json
 {"type":"decision","turn":7,"action":{"scouts":15,"trail_gain":78,

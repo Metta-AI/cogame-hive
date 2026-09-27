@@ -6,8 +6,7 @@ marcher players. An ordinary player uses the same authenticated JSON WebSocket.
 Each turn it receives a private view and constructs its own prompt and complete
 doctrine candidates. The game parses and records its returned doctrine.
 
-The default player chooses marcher. `HIVE_JEV=1` asks Jev through the System
-One sidecar to choose between marcher and driftling. `HIVE_ADAPTER_DIR` loads
+The default player chooses marcher. `HIVE_ADAPTER_DIR` loads
 a packaged trained adapter with its matching local base model, PyTorch,
 Transformers, and PEFT. `PLAYER_PROMPT` remains private to the seat.
 
