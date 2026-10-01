@@ -33,13 +33,16 @@ def choose(turn: dict, generator, marcher: ScriptedPolicy, driftling: ScriptedPo
             raise ValueError("trained Hive decision must be a JSON object")
         return action, "trained", system, user
     if strategy:
-        body = json.dumps({"model": os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5"),
+        endpoint = os.environ.get("COWORLD_LLM_ENDPOINT", "").rstrip("/")
+        model = (os.environ.get("COWORLD_LLM_MODEL", "anthropic/claude-haiku-4.5")
+                 if endpoint else os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"))
+        body = json.dumps({"model": model,
                            "max_tokens": 500, "system": system,
                            "messages": [{"role": "user", "content": user}]}).encode()
         request = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages", body,
+            (f"{endpoint}/v1/messages" if endpoint else "https://api.anthropic.com/v1/messages"), body,
             {"Content-Type": "application/json", "anthropic-version": "2023-06-01",
-             "x-api-key": os.environ["ANTHROPIC_API_KEY"]}, method="POST")
+             "x-api-key": ("sidecar" if endpoint else os.environ["ANTHROPIC_API_KEY"])}, method="POST")
         with urllib.request.urlopen(request, timeout=10) as response:
             action = json.loads(json.load(response)["content"][0]["text"])
         return action, "llm", system, user
