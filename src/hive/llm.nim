@@ -12,7 +12,8 @@
 ## and writes a `fallback` event. Seats are NEVER queried sequentially.
 ##
 ## Credentials, in order of preference:
-##   Bedrock sidecar / bearer token   - hosted pods
+##   COWORLD_LLM_ENDPOINT            - hosted sidecar
+##   Bedrock bearer token            - local play
 ##   ANTHROPIC_API_KEY                - the key itself
 ##   ANTHROPIC_API_KEY_URI            - a URI holding the key
 ## With no credentials the client disables itself on first discovery, every
@@ -75,12 +76,13 @@ and lets it fade before you launch somewhere else.
 
 type
   LlmTransport = enum
-    ltNone, ltBedrock, ltAnthropic
+    ltNone, ltSidecar, ltBedrock, ltAnthropic
 
   LlmClient* = ref object
     curl: Curly
     transport: LlmTransport
     apiKey: string
+    sidecarEndpoint: string
     bedrockEndpoint: string
     bedrockModels: seq[string]
     bedrockModel: int
@@ -157,6 +159,13 @@ proc newLlmClient*(model = "claude-sonnet-5", maxOutputTokens = 900,
     turnBudgetSeconds = DefaultTurnBudgetSeconds): LlmClient =
   result = LlmClient(model: model, maxOutputTokens: maxOutputTokens,
     turnBudgetSeconds: turnBudgetSeconds)
+  let sidecarEndpoint = getEnv("COWORLD_LLM_ENDPOINT").strip()
+  if sidecarEndpoint.len > 0:
+    result.transport = ltSidecar
+    result.sidecarEndpoint = sidecarEndpoint.strip(chars = {'/'}, leading = false)
+    result.model = getEnv("COWORLD_LLM_MODEL", "anthropic/claude-haiku-4.5")
+    result.curl = newCurly()
+    return
   let client = result
   result.sendBatch = proc (batch: RequestBatch, timeoutSeconds: int):
       ResponseBatch {.gcsafe.} =
@@ -197,7 +206,7 @@ proc userMessage*(match: Sim, seat: int, prompt: string): string =
 
 proc requestFor(
   client: LlmClient,
-  system, user: string
+  system, user: string, slot: int
 ): tuple[url: string, headers: HttpHeaders, body: string] =
   var body = %*{
     "max_tokens": client.maxOutputTokens,
@@ -206,12 +215,18 @@ proc requestFor(
     "messages": [{"role": "user", "content": user}]
   }
   var headers: HttpHeaders
+  if client.transport == ltSidecar and slot >= 0:
+    headers["X-Coworld-Player-Slot"] = $slot
   headers["content-type"] = "application/json"
   if client.transport == ltBedrock:
     body["anthropic_version"] = %BedrockAnthropicVersion
     if client.bedrockToken.len > 0:
       headers["authorization"] = "Bearer " & client.bedrockToken
     result.url = client.bedrockUrl()
+  elif client.transport == ltSidecar:
+    body["model"] = %client.model
+    headers["anthropic-version"] = AnthropicVersion
+    result.url = client.sidecarEndpoint & "/v1/messages"
   else:
     body["model"] = %client.model
     ## Haiku 4.5 rejects `output_config.effort` outright with a 400.
@@ -389,7 +404,7 @@ proc decideAll*(
           "requested JSON object, beginning with '{' and containing the " &
           "integer keys scouts, trail_gain, poach, spread, lay_food, " &
           "lay_home, focus_weight and the keys recall, focus, note, say.")
-      let request = client.requestFor(SystemPrompt, user)
+      let request = client.requestFor(SystemPrompt, user, seat)
       batch.post(request.url, request.headers, request.body, $seat)
     ## Every request in this batch went to this candidate; a 403 from any of
     ## them is one verdict on it.
