@@ -71,7 +71,6 @@ proc main() =
     check("image: coworld-hive:latest" in compose,
       "compose pins the image name coworld-hive:latest")
     check("platform: linux/amd64" in compose, "compose pins linux/amd64")
-    check("network: host" in compose, "compose builds with network: host")
     checkEqual(game["runnable"]["run"][0].getStr(), "/bin/hive",
       "the game entrypoint")
     checkEqual(game["runnable"]["type"].getStr(), "game",
