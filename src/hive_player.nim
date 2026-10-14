@@ -29,7 +29,8 @@ when isMainModule:
     quit(1)
 
   var scripted = getEnv("PLAYER_SCRIPTED").strip()
-  if scripted.len == 0:
+  let prompt = getEnv("PLAYER_PROMPT").strip()
+  if scripted.len == 0 and prompt.len == 0:
     scripted = DefaultScripted
     echo "hive player: using the ", DefaultScripted, " baseline"
   let policy = getEnv("PLAYER_POLICY_LABEL")
@@ -39,11 +40,14 @@ when isMainModule:
   var lastAction: JsonNode
 
   proc registerFrame(): string =
-    $ %*{
+    var frame = %*{
       "type": "register",
       "scripted": (if scripted.len > 0: %scripted else: newJNull()),
       "policy": policy
     }
+    if prompt.len > 0:
+      frame["prompt"] = %prompt
+    $frame
 
   ## A bounded connect retry: an unreachable game is reported and the
   ## process exits 0 rather than hanging a pod for the episode timeout.
@@ -61,7 +65,8 @@ when isMainModule:
       sleep(1000 * attempt)
 
   socket.send(registerFrame())
-  echo "hive player: registered scripted ", scripted
+  echo "hive player: registered ",
+    (if prompt.len > 0: "hosted prompt" else: "scripted " & scripted)
 
   ## A BOUNDED receive loop. `receiveMessage(timeout)` returns none when the
   ## poll expires without a frame arriving - that is not a close, so the loop
