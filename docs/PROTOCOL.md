@@ -21,13 +21,13 @@ connection on a live slot is **409**.
 `PLAYER_POLICY_LABEL`, sends that frame, then answers each `decision_request`
 from its private view. A seat that never connects plays the game fallback.
 `PLAYER_SCRIPTED` parsing: `marcher` / `1` / `true` / `yes` → marcher,
-`driftling` → driftling, anything else → none. Named scripted registrations
-run in the game without waiting for decisions.
+`driftling` → driftling, anything else → none.
 
 Released `hive.player.v1` players may instead register a `prompt` string
 (at most 4000 runes). The game resolves those doctrines through the hosted
-LLM sidecar, in parallel with ordinary players. Prompts never enter replays.
-Registrations without a prompt or named script select ordinary decisions;
+LLM sidecar, in parallel with ordinary players. A named script plus the v1
+`prompt` field runs directly in the game. Prompts never enter replays.
+Registrations without a `prompt` field select ordinary decisions;
 their strategy stays inside the player container.
 
 The game sends one private observation to every ordinary player. The bundled

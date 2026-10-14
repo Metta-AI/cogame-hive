@@ -641,7 +641,7 @@ proc websocketHandler(
           withLock stateLock:
             game.roster.register(slot, scripted,
               payload{"policy"}.getStr(),
-              external = not payload.hasKey("prompt") and scripted.len == 0,
+              external = not payload.hasKey("prompt"),
               prompt = payload{"prompt"}.getStr())
             echo "hive: slot ", slot, " registered (",
               game.roster.seats[slot].policyKind(), ")"
