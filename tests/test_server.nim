@@ -171,7 +171,9 @@ proc main() =
     check(welcome.isSome, "the seat receives a welcome frame")
     let hello = parseJson(welcome.get().data)
     checkEqual(hello["type"].getStr(), "welcome", "the frame is a welcome")
-    checkEqual(hello["protocol"].getStr(), "hive.player.v2", "protocol")
+    checkEqual(hello["protocol"].getStr(), "hive.player.v1", "released prompt protocol")
+    checkEqual(hello["supported_protocols"][1].getStr(), "hive.player.v2",
+      "ordinary decision protocol remains supported")
     checkEqual(hello["slot"].getInt(), 0, "the slot is echoed")
     check(hello["colony"].getStr() in ["Amber", "Teal", "Lime", "Magenta"],
       "the welcome names a colony ALIAS, never a player")
@@ -229,7 +231,9 @@ proc main() =
     let events = readFile(work / "events.jsonl").strip().splitLines()
     check(events.len > 2, "the events file has one JSON object a line")
     for line in events:
-      discard parseJson(line)
+      let event = parseJson(line)
+      check(event{"type"}.getStr() != "fallback",
+        "registered hosted scripted seats never wait for external replies")
     report("artifacts land on file:// URIs and the grace keeps the pod alive")
 
     live.close()

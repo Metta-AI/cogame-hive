@@ -21,10 +21,16 @@ connection on a live slot is **409**.
 `PLAYER_POLICY_LABEL`, sends that frame, then answers each `decision_request`
 from its private view. A seat that never connects plays the game fallback.
 `PLAYER_SCRIPTED` parsing: `marcher` / `1` / `true` / `yes` → marcher,
-`driftling` → driftling, anything else → none. A strategy prompt stays inside
-the player container and never enters the game protocol.
+`driftling` → driftling, anything else → none. Named scripted registrations
+run in the game without waiting for decisions.
 
-The game sends one private observation to every connected player. The bundled
+Released `hive.player.v1` players may instead register a `prompt` string
+(at most 4000 runes). The game resolves those doctrines through the hosted
+LLM sidecar, in parallel with ordinary players. Prompts never enter replays.
+Registrations without a prompt or named script select ordinary decisions;
+their strategy stays inside the player container.
+
+The game sends one private observation to every ordinary player. The bundled
 Nim player executes marcher or driftling. The Python ordinary player constructs
 its own prompt and candidate doctrines from the observation, then invokes its
 configured prompt or trained backend. Each returns one JSON text frame:
@@ -45,7 +51,8 @@ game waits for any seat. The game never receives an inference credential.
 ### game → player
 
 ```json
-{"type": "welcome", "protocol": "hive.player.v2", "slot": 0,
+{"type": "welcome", "protocol": "hive.player.v1",
+ "supported_protocols": ["hive.player.v1", "hive.player.v2"], "slot": 0,
  "colony": "Amber", "colour": "#f2c14e",
  "turns": 20, "turn_ticks": 240, "ants": 24}
 ```

@@ -159,6 +159,10 @@ proc newLlmClient*(model = "claude-sonnet-5", maxOutputTokens = 900,
     turnBudgetSeconds = DefaultTurnBudgetSeconds): LlmClient =
   result = LlmClient(model: model, maxOutputTokens: maxOutputTokens,
     turnBudgetSeconds: turnBudgetSeconds)
+  let client = result
+  result.sendBatch = proc (batch: RequestBatch, timeoutSeconds: int):
+      ResponseBatch {.gcsafe.} =
+    client.curl.makeRequests(batch, timeoutSeconds)
   let sidecarEndpoint = getEnv("COWORLD_LLM_ENDPOINT").strip()
   if sidecarEndpoint.len > 0:
     result.transport = ltSidecar
@@ -166,12 +170,6 @@ proc newLlmClient*(model = "claude-sonnet-5", maxOutputTokens = 900,
     result.model = getEnv("COWORLD_LLM_MODEL", "anthropic/claude-haiku-4.5")
     result.curl = newCurly()
     return
-  let client = result
-  result.sendBatch = proc (batch: RequestBatch, timeoutSeconds: int):
-      ResponseBatch {.gcsafe.} =
-    ## ONE parallel batch for the whole turn. Seats are never queried
-    ## sequentially: at most four requests, all in flight together.
-    client.curl.makeRequests(batch, timeoutSeconds)
   let bedrockEndpoint = getEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME").strip()
   let bedrockToken = getEnv("AWS_BEARER_TOKEN_BEDROCK").strip()
   if bedrockEndpoint.len > 0 or bedrockToken.len > 0:
