@@ -18,7 +18,7 @@
 ##   WS  /player?slot=N&token=T    the player protocol
 ##   WS  /global                   spectator snapshots
 ##
-## Player protocol (hive.player.v2), all JSON text frames:
+## Player protocols (released prompt v1 and ordinary decision v2), JSON frames:
 ##   player -> game: {"type":"register","scripted":"marcher",
 ##                    "policy":"..."}
 ##                   {"type":"decision","turn":N,"action":{...}}
@@ -34,20 +34,12 @@ import bitworld/runtime
 import curly
 import mummy, mummy/routers
 import types, config, field, doctrine, baselines, roster, sim, rules,
-  broadcast, global, replay, state, events
+  broadcast, global, llm, replay, state, events
 
 const
   ShutdownGraceSeconds* = 20.0
   DoneBroadcastSeconds* = 3.0
   PlayBudgetFraction* = 0.6
-  FirstAttemptSeconds = 14
-  RetryAttemptSeconds = 6
-
-type SeatOutcome = object
-  resolved: ResolvedDoctrine
-  cause: string
-  detail: string
-  attempts: int
 
 type
   GameState = object
@@ -236,6 +228,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## reported for the lowest offending slot only.
       declarePlayerFailure(missing[0], "player never connected")
 
+    let client = newLlmClient(turnBudgetSeconds = gameConfig.turnBudgetSeconds)
     var memory: array[Colonies, BaselineMemory]
     var turnsLlm: array[Colonies, int]
     var fallbackTurns: array[Colonies, int]
@@ -252,10 +245,14 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         ResolvedDoctrine] {.closure.} =
       var scripted: array[Colonies, ScriptKind]
       var connected: array[Colonies, bool]
+      var external: array[Colonies, bool]
+      var prompts: array[Colonies, string]
       withLock stateLock:
         for seat in 0 ..< Colonies:
           scripted[seat] = game.roster.seats[seat].scripted
           connected[seat] = game.roster.seats[seat].connected
+          external[seat] = game.roster.seats[seat].external
+          prompts[seat] = game.roster.seats[seat].prompt
 
       ## Budget guard: settle early rather than overrun. Once it engages the
       ## Player requests are skipped for all remaining turns.
@@ -290,6 +287,8 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             if connected[seat] and game.playerSockets.hasKey(seat):
               sockets[seat] = game.playerSockets[seat]
         for seat in 0 ..< Colonies:
+          if not external[seat]:
+            continue
           let view = buildView(match, seat)
           marcher[seat] = scriptedResolved(view, skMarcher, turn,
             memory[seat])
@@ -307,6 +306,12 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             sockets[seat].send($requests[seat])
           except CatchableError:
             discard
+
+        # External requests are already in flight while hosted seats resolve.
+        let hosted = client.decideAll(match, prompts, scripted, memory, turn, external)
+        for seat in 0 ..< Colonies:
+          if not external[seat]:
+            outcomes[seat] = hosted[seat]
 
         for attempt in 1 .. 2:
           if waiting.len == 0:
@@ -584,7 +589,8 @@ proc playerUpgradeHandler(request: Request) {.gcsafe.} =
         game.playerSockets.len, "/", Colonies, ")"
       websocket.send($ %*{
         "type": "welcome",
-        "protocol": "hive.player.v2",
+        "protocol": "hive.player.v1",
+        "supported_protocols": ["hive.player.v1", "hive.player.v2"],
         "slot": slot,
         "colony": game.match.meadow.nests[colony].alias,
         "colour": game.match.meadow.nests[colony].colour,
@@ -634,7 +640,9 @@ proc websocketHandler(
             else: scriptedNode.getStr()
           withLock stateLock:
             game.roster.register(slot, scripted,
-              payload{"policy"}.getStr(), true)
+              payload{"policy"}.getStr(),
+              external = not payload.hasKey("prompt"),
+              prompt = payload{"prompt"}.getStr())
             echo "hive: slot ", slot, " registered (",
               game.roster.seats[slot].policyKind(), ")"
         elif payload{"type"}.getStr() == "decision" and

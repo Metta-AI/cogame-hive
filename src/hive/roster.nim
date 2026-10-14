@@ -23,6 +23,7 @@ type
     everConnected*: bool
     scripted*: ScriptKind
     external*: bool
+    prompt*: string
     policyLabel*: string
     registered*: bool
 
@@ -49,15 +50,20 @@ proc register*(
   roster: var Roster,
   slot: int,
   scripted, policy: string,
-  external = false
+  external = false,
+  prompt = ""
 ) =
   if slot < 0 or slot >= Colonies:
     return
   let kind = parseScriptKind(scripted)
   roster.seats[slot].external = external
+  let cleaned = prompt.strip()
+  roster.seats[slot].prompt =
+    if cleaned.runeLen <= 4000: cleaned
+    else: cleaned.runeSubStr(0, 4000)
   roster.seats[slot].scripted =
     if kind != skNone: kind
-    elif external: skNone
+    elif external or roster.seats[slot].prompt.len > 0: skNone
     else: skMarcher
   roster.seats[slot].policyLabel = truncatePolicy(policy)
   roster.seats[slot].registered = true
