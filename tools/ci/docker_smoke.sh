@@ -194,6 +194,7 @@ game_env=()
 
 echo "starting game container (${image} ${game_bin}) ..."
 docker run -d --name "${prefix}-game" \
+  --memory=1g --memory-swap=1g \
   --network "${network}" --network-alias "${prefix}-game" \
   -e COGAME_HOST=0.0.0.0 \
   -e COGAME_PORT="${port}" \
@@ -210,6 +211,7 @@ for ((slot = 0; slot < seats; slot++)); do
   eval "pcmd=( $(cat "${work_dir}/cmd-${slot}.args") )"
   player_image="${image}"
   player_mount=()
+  player_user=()
   if [[ "${slot}" == "0" && -n "${ordinary_image}" ]]; then
     player_image="${ordinary_image}"
     pcmd=(python player.py)
@@ -217,11 +219,14 @@ for ((slot = 0; slot < seats; slot++)); do
       -e "HIVE_SOURCE_REVISION=${GITHUB_SHA:-local-smoke}"
       -e COWORLD_PLAYER_ARTIFACT_UPLOAD_URL=file:///coworld-artifact/policy_artifact_0.zip)
     player_mount=(-v "${work_dir}:/coworld-artifact:rw")
+    player_user=(--user "$(id -u):$(id -g)")
   fi
   docker run -d --name "${prefix}-p${slot}" --network "${network}" \
+    --memory=256m --memory-swap=256m \
     -e COWORLD_PLAYER_WS_URL="ws://${prefix}-game:${port}/player?slot=${slot}&token=token-${slot}" \
     ${penv[@]+"${penv[@]}"} \
     ${player_mount[@]+"${player_mount[@]}"} \
+    ${player_user[@]+"${player_user[@]}"} \
     "${player_image}" ${pcmd[@]+"${pcmd[@]}"} >/dev/null
 done
 
@@ -255,6 +260,7 @@ if [ -n "${ordinary_image}" ]; then
   fi
   python3 - "${work_dir}" <<'PY'
 import json
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -262,6 +268,9 @@ from pathlib import Path
 work = Path(sys.argv[1])
 results = json.loads((work / "results.json").read_text())
 replay = json.loads((work / "replay.json").read_text())
+private_artifact = work / "policy_artifact_0.zip"
+assert private_artifact.stat().st_mode & 0o777 == 0o600
+assert private_artifact.stat().st_uid == os.getuid()
 with zipfile.ZipFile(work / "policy_artifact_0.zip") as archive:
     trajectory = json.loads(archive.read("trajectory.json"))
 assert results["reason"] == "complete"
