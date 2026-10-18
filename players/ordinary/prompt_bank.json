@@ -1,0 +1,12 @@
+{
+  "version": "hive-rules-v1",
+  "introductions": {
+    "canonical": "You are the whole mind of one ant colony on a 160x88 cell meadow shared with three\nrival colonies. You have 24 identical ants. ",
+    "plain": "You control one ant colony sharing a 160x88 cell meadow with three rival colonies. Your colony has 24 identical ants. ",
+    "numbered": "1. You are the mind of one ant colony. 2. It has 24 identical ants. 3. Three rival colonies share its 160x88 cell meadow. ",
+    "questions": "What do you control? One colony of 24 identical ants. Where? A 160x88 cell meadow shared with three rival colonies. ",
+    "reordered": "A 160x88 cell meadow is shared by your ant colony and three rival colonies. You are the mind of your colony, with 24 identical ants. ",
+    "heldout-briefing": "Your assignment is to direct the colony-level policy for 24 identical ants in one colony. Three rival colonies share the same 160x88 cell meadow. ",
+    "heldout-reference": "Controlled group: one ant colony with 24 identical ants. Setting: a 160x88 cell meadow. Rivals: three other colonies. "
+  }
+}

@@ -6,6 +6,7 @@ import unittest
 
 from player import choose
 from policy import ScriptedPolicy
+from prompts import PromptSelection
 
 
 VIEW = {
@@ -21,7 +22,7 @@ class PlayerPolicyTest(unittest.TestCase):
     def test_scripted_choice_uses_private_view(self) -> None:
         action, source, _, user = choose(
             {"view": VIEW}, None, ScriptedPolicy(), ScriptedPolicy("driftling"),
-            "", "marcher")
+            "", "marcher", PromptSelection())
         self.assertEqual(source, "scripted")
         self.assertEqual(action["focus"], [9, 5])
         self.assertEqual(action["note"], "marcher: pump")

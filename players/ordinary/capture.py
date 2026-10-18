@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from prompts import PromptSelection
+
 
 class Capture:
     def __init__(self, slot: int, backend: str) -> None:
@@ -20,13 +22,16 @@ class Capture:
         self.rows: list[dict] = []
 
     def record(
-        self, system: str, user: str, action: dict, source: str, tick: int
+        self, system: str, user: str, action: dict, source: str, tick: int,
+        executed_action: dict, selection: PromptSelection
     ) -> None:
         self.rows.append(
             {
                 "decision_id": len(self.rows),
                 "tick": tick,
                 "source": source,
+                "prompt_template": selection.metadata(system, user),
+                "executed_action": executed_action,
                 "prompt": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
@@ -44,7 +49,7 @@ class Capture:
                 "trajectory.json",
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "game": "hive",
                         "slot": self.slot,
                         "backend": self.backend,

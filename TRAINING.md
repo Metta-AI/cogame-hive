@@ -23,30 +23,41 @@ The scripted `marcher` baseline is available through the bridge's `teacher`
 request. The hosted language player can still write notes and a short public
 line; the numeric bridge uses empty strings for those fields.
 
-## Metta post-training
+## Prompt selection and private candidates
 
-The exporter records the acting seat's hosted system and user messages and
-a `marcher` doctrine accepted by the game's parser. It keeps complete games
-in one train or validation split:
+Five training introductions (`canonical`, `plain`, `numbered`, `questions`,
+`reordered`) and two held-out introductions (`heldout-briefing`,
+`heldout-reference`) share one JSON bank between native and Python players.
+The original system prompt remains the canonical text. `mixed` uses
+`promptSeed % 5` without consuming simulation randomness.
+
+Set `promptVariant` and `promptSeed` in game configuration or bridge reset.
+Selection remains fixed for the episode. The host sends it only in private
+player envelopes. Append `--language` to the bridge command for complete
+doctrines, notes and spectator lines through the production parser.
+Numeric features and action heads remain unchanged. Training reset rejects
+held-out wording.
+
+The native exporter writes private `trajectories.jsonl`, a review-required
+manifest, and per-game replay files. It requires a clean committed checkout.
+Each candidate retains exact prompts and hashes, its teacher proposal, and
+the doctrine actually installed. No automatic train/validation split or
+success label is assigned. The shared importer and independent review own
+admission; `hive-SEED` families group all variants and wording replicas.
 
 ```sh
-for variant in default sprint; do
-  nim r -d:release --path:src tools/export_posttrain.nim \
-    "/tmp/hive-${variant}" 10 1 "$variant"
-done
+nim c -d:release --path:src -o:/tmp/hive-posttrain tools/export_posttrain.nim
+/tmp/hive-posttrain /tmp/hive-candidates 10 1 default mixed 3
+nim c -d:release --path:src -o:/tmp/hive-verify tools/verify_training_replay.nim
+/tmp/hive-verify /tmp/hive-candidates/hive-1-default-questions.replay.json
 ```
 
-From a Metta checkout, train an output with Metta post-training:
+Replay verification re-runs the production runtime and checks every digest
+and recorded ant byte. Held-out wording is evaluation-only and cannot be
+exported as a training candidate. Deterministic checks do not demonstrate
+improved model play or prevention of training collapse.
 
-```sh
-nix develop -c uv run --package metta-posttrain --extra train \
-  python -m metta_posttrain.train --dataset /tmp/hive-default \
-  --output /tmp/hive-adapter --model Qwen/Qwen3-0.6B \
-  --max-steps 100 --max-length 4096
-```
-
-Ten games yielded 640 training and 160 validation decisions for Default,
-and 384 training and 96 validation decisions for Sprint. All 1,280 examples
-fit a Qwen tokenizer at 4,096 tokens. One CPU optimizer step per variant
-with a local tiny model reduced held-out loss. These runs verify the data
-path and distill the scripted baseline; they do not establish stronger play.
+Ordinary-player capture schema 2 retains the proposed doctrine and the
+host-normalized action receipt, plus selection and exact prompt hashes.
+`players/ordinary/export.py` remains the reader for archived schema-1 data;
+it does not accept schema-2 captures.

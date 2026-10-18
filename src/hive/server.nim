@@ -34,7 +34,7 @@ import bitworld/runtime
 import curly
 import mummy, mummy/routers
 import types, config, field, doctrine, baselines, roster, sim, rules,
-  broadcast, global, llm, replay, state, events
+  broadcast, global, llm, replay, state, events, prompts
 
 const
   ShutdownGraceSeconds* = 20.0
@@ -43,6 +43,7 @@ const
 
 type
   GameState = object
+    selection: PromptSelection
     config: GameConfig
     match: Sim
     roster: Roster
@@ -299,6 +300,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             continue
           requests[seat] = %*{
             "type": "decision_request", "turn": turn,
+            "prompt_selection": game.selection.selectionMetadata(),
             "view": view
           }
           waiting.add(seat)
@@ -308,7 +310,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             discard
 
         # External requests are already in flight while hosted seats resolve.
-        let hosted = client.decideAll(match, prompts, scripted, memory, turn, external)
+        let hosted = client.decideAll(match, prompts, scripted, memory, turn, game.selection, external)
         for seat in 0 ..< Colonies:
           if not external[seat]:
             outcomes[seat] = hosted[seat]
@@ -382,7 +384,8 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             try:
               sockets[seat].send($(%*{
                 "type": "decision_result", "turn": turn,
-                "accepted": outcomes[seat].cause.len == 0
+                "accepted": outcomes[seat].cause.len == 0,
+                "action": outcomes[seat].resolved.doctrine.toJson()
               }))
             except CatchableError:
               discard
@@ -589,6 +592,7 @@ proc playerUpgradeHandler(request: Request) {.gcsafe.} =
         game.playerSockets.len, "/", Colonies, ")"
       websocket.send($ %*{
         "type": "welcome",
+        "prompt_selection": game.selection.selectionMetadata(),
         "protocol": "hive.player.v1",
         "supported_protocols": ["hive.player.v1", "hive.player.v2"],
         "slot": slot,
@@ -697,6 +701,7 @@ proc runGameServer*(gameConfig: GameConfig, runtimeConfig: RuntimeConfig) =
       "hive needs " & $Colonies & " players, got " & $gameConfig.players.len)
   ## Pre-listen field bake, so a viewer's first frame is instant.
   let meadow = ensureField(gameConfig.fieldPath)
+  game.selection = promptSelection(parseJson(runtimeConfig.config))
   game.config = gameConfig
   game.match = newSim(gameConfig, meadow)
   game.roster = initRoster(gameConfig.tokens)

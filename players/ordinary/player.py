@@ -12,13 +12,14 @@ from urllib.parse import parse_qs, urlsplit
 import websocket
 from capture import Capture
 from policy import ScriptedPolicy, prompt_for
+from prompts import PromptSelection
 
 
 def choose(turn: dict, generator, marcher: ScriptedPolicy, driftling: ScriptedPolicy,
-           strategy: str, scripted: str) -> tuple[dict, str, str, str]:
+           strategy: str, scripted: str, selection: PromptSelection) -> tuple[dict, str, str, str]:
     view = turn["view"]
     candidates = [marcher.decide(view), driftling.decide(view)]
-    system, user = prompt_for(view, strategy)
+    system, user = prompt_for(view, strategy, selection)
     if scripted:
         return candidates[1 if scripted == "driftling" else 0], "scripted", system, user
     if generator:
@@ -84,7 +85,8 @@ def main() -> None:
             time.sleep(0.25)
     socket.settimeout(120)
     socket.send(registration)
-    pending: dict[int, tuple[str, str, dict, str]] = {}
+    selection = PromptSelection()
+    pending: dict[int, tuple[str, str, dict, str, PromptSelection]] = {}
     while True:
         opcode, data = socket.recv_data(control_frame=True)
         if opcode == websocket.ABNF.OPCODE_CLOSE:
@@ -100,19 +102,24 @@ def main() -> None:
             break
         kind = frame["type"]
         if kind == "welcome":
+            selection = PromptSelection.model_validate(frame["prompt_selection"])
             socket.send(registration)
         elif kind == "decision_request":
             if frame["turn"] not in pending:
+                if PromptSelection.model_validate(frame["prompt_selection"]) != selection:
+                    raise ValueError("prompt selection changed during the episode")
                 action, source, system, user = choose(
-                    frame, generator, marcher, driftling, strategy, scripted)
-                pending[frame["turn"]] = (system, user, action, source)
-            _, _, action, source = pending[frame["turn"]]
+                    frame, generator, marcher, driftling, strategy, scripted,
+                    selection)
+                pending[frame["turn"]] = (system, user, action, source, selection)
+            _, _, action, source, _ = pending[frame["turn"]]
             socket.send(json.dumps({"type": "decision", "turn": frame["turn"],
                                     "action": action, "source": source}))
         elif kind == "decision_result":
-            system, user, action, source = pending.pop(frame["turn"])
+            system, user, action, source, selection = pending.pop(frame["turn"])
             if artifact and frame["accepted"]:
-                artifact.record(system, user, action, source, frame["turn"])
+                artifact.record(system, user, action, source, frame["turn"],
+                                frame["action"], selection)
     socket.close()
     print(f"Hive ordinary player finished: slot={slot} backend={backend}", flush=True)
 

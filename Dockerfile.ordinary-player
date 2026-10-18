@@ -4,6 +4,6 @@ WORKDIR /player
 COPY players/ordinary/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY players/ordinary/*.py .
-COPY players/ordinary/system_prompt.txt .
+COPY players/ordinary/system_prompt.txt players/ordinary/prompt_bank.json ./
 
 CMD ["python", "player.py"]

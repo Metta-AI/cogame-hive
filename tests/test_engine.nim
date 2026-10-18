@@ -10,7 +10,7 @@
 import std/[json, os, strutils, times, unicode]
 import curly
 import support/helpers
-import hive/[field, llm, roster, replay, sources, state, events]
+import hive/[field, llm, roster, replay, sources, state, events, prompts]
 
 type BatchRecord = object
   size: int
@@ -157,7 +157,7 @@ proc main() =
         array[Colonies, ResolvedDoctrine] {.closure.} =
       inc turns
       let outcomes = client.decideAll(m, promptsAll("raid the centre"),
-        scripted, memory, turn)
+        scripted, memory, turn, PromptSelection())
       for seat in 0 ..< Colonies:
         result[seat] = outcomes[seat].resolved
     match.runEpisode(provide)
@@ -190,7 +190,7 @@ proc main() =
     var external: array[Colonies, bool]
     external[0] = true
     let outcomes = client.decideAll(match, promptsAll("go"), scripted,
-      memory, 0, external)
+      memory, 0, PromptSelection(), external)
     checkEqual(records.len, 1, "model seats still use one batch")
     checkEqual(records[0].size, 3,
       "the ordinary seat is excluded from the model batch")
@@ -206,7 +206,7 @@ proc main() =
     var match = newSim(testConfig(240, 5), meadow)
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     checkEqual(records.len, 2,
       "an unusable reply costs exactly one retry, no more")
     checkEqual(records[0].size, Colonies, "the first batch holds all four")
@@ -241,7 +241,7 @@ proc main() =
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
     let started = epochTime()
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     let elapsed = epochTime() - started
     checkEqual(records.len, 2, "a throttled batch is retried exactly once")
     checkEqual(records[1].size, Colonies, "the retry re-batches all four")
@@ -279,7 +279,7 @@ proc main() =
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
     let started = epochTime()
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     let elapsed = epochTime() - started
     checkEqual(records.len, 2, "a 503 is retried exactly once")
     for seat in 0 ..< Colonies:
@@ -306,7 +306,7 @@ proc main() =
     var match = newSim(testConfig(240, 5), meadow)
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     checkEqual(records.len, 2, "a refusal is retried exactly once")
     for seat in 0 ..< Colonies:
       checkEqual(outcomes[seat].cause, "refusal", "the cause is refusal")
@@ -387,7 +387,7 @@ proc main() =
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
     let started = epochTime()
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     let elapsed = epochTime() - started
     check(elapsed < 5.0,
       "a hung client cannot outrun the per-turn budget (took " &
@@ -414,7 +414,7 @@ proc main() =
     var memory: array[Colonies, BaselineMemory]
     var scripted: array[Colonies, ScriptKind]
     let started = epochTime()
-    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let outcomes = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     let elapsed = epochTime() - started
     checkEqual(records.len, 1,
       "the retry is never started once the outer deadline is spent")
@@ -447,7 +447,7 @@ proc main() =
     ## Three candidates; each decideAll issues two batches and each batch is
     ## one verdict on one candidate, so the first call steps off haiku and
     ## sonnet-4-6 without disabling anything.
-    let first = client.decideAll(match, promptsAll("go"), scripted, memory, 0)
+    let first = client.decideAll(match, promptsAll("go"), scripted, memory, 0, PromptSelection())
     check(not client.disabled,
       "a 403 walks the bedrock ladder instead of writing the client off")
     checkEqual(records.len, 2,
@@ -456,7 +456,7 @@ proc main() =
     for seat in 0 ..< Colonies:
       checkEqual($first[seat].resolved.source, "fallback",
         "the turn still falls back so no colony is unactuated")
-    let second = client.decideAll(match, promptsAll("go"), scripted, memory, 1)
+    let second = client.decideAll(match, promptsAll("go"), scripted, memory, 1, PromptSelection())
     check(client.disabled,
       "only when the LAST candidate 403s is the client disabled")
     for seat in 0 ..< Colonies:
