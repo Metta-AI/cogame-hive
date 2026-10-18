@@ -11,8 +11,7 @@ from prompts import PromptSelection
 
 VIEW = {
     "turn": 3,
-    "you": {"delivered_last_turn": 5, "last_doctrine": None,
-            "nest_block": [2, 1]},
+    "you": {"delivered_last_turn": 5, "last_doctrine": None, "nest_block": [2, 1]},
     "field": {"blocks": [20, 11]},
     "sources": [{"block": [9, 5], "amount_seen": 41}],
 }
@@ -20,13 +19,20 @@ VIEW = {
 
 class PlayerPolicyTest(unittest.TestCase):
     def test_scripted_choice_uses_private_view(self) -> None:
-        action, source, _, user = choose(
-            {"view": VIEW}, None, ScriptedPolicy(), ScriptedPolicy("driftling"),
-            "", "marcher", PromptSelection())
-        self.assertEqual(source, "scripted")
-        self.assertEqual(action["focus"], [9, 5])
-        self.assertEqual(action["note"], "marcher: pump")
-        self.assertIn('"amount_seen": 41', user)
+        choice = choose(
+            {"view": VIEW},
+            None,
+            ScriptedPolicy(),
+            ScriptedPolicy("driftling"),
+            "",
+            "marcher",
+            PromptSelection(),
+        )
+        self.assertEqual(choice.source, "scripted")
+        self.assertEqual(choice.action["focus"], [9, 5])
+        self.assertEqual(choice.action["note"], "marcher: pump")
+        self.assertIn('"amount_seen": 41', choice.user)
+
 
 if __name__ == "__main__":
     unittest.main()

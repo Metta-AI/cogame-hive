@@ -1,4 +1,4 @@
-"""Retain accepted player decisions in the standard Coworld artifact."""
+"""Retain proposed replies and host receipts in the private player artifact."""
 
 from __future__ import annotations
 
@@ -10,7 +10,21 @@ import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from pydantic import BaseModel
+
 from prompts import PromptSelection
+
+
+class Choice(BaseModel):
+    action: dict
+    source: str
+    system: str
+    user: str
+    completion: str
+    request_body: str = ""
+    response_body: str = ""
+    response_status: int = 0
+    model: str = ""
 
 
 class Capture:
@@ -22,23 +36,36 @@ class Capture:
         self.rows: list[dict] = []
 
     def record(
-        self, system: str, user: str, action: dict, source: str, tick: int,
-        executed_action: dict, selection: PromptSelection
+        self,
+        choice: Choice,
+        receipt: dict,
+        transmissions: int,
+        selection: PromptSelection,
     ) -> None:
         self.rows.append(
             {
                 "decision_id": len(self.rows),
-                "tick": tick,
-                "source": source,
-                "prompt_template": selection.metadata(system, user),
-                "executed_action": executed_action,
+                "tick": receipt["turn"],
+                "source": choice.source,
+                "prompt_template": selection.metadata(choice.system, choice.user),
+                "executed_action": receipt["action"],
+                "accepted": receipt["accepted"],
+                "receipt": receipt,
+                "transmissions": transmissions,
+                "generation": {
+                    key: getattr(choice, key)
+                    for key in (
+                        "request_body",
+                        "response_body",
+                        "response_status",
+                        "model",
+                    )
+                },
                 "prompt": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
+                    {"role": "system", "content": choice.system},
+                    {"role": "user", "content": choice.user},
                 ],
-                "completion": [
-                    {"role": "assistant", "content": json.dumps(action, sort_keys=True)}
-                ],
+                "completion": [{"role": "assistant", "content": choice.completion}],
             }
         )
 
@@ -66,7 +93,10 @@ class Capture:
         if url.scheme == "file":
             target = Path(unquote(url.path))
             pending = target.with_name(target.name + ".tmp")
-            pending.write_bytes(data)
+            with os.fdopen(
+                os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb"
+            ) as output:
+                output.write(data)
             os.replace(pending, target)
         else:
             request = urllib.request.Request(

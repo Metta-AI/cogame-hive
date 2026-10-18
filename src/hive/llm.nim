@@ -71,6 +71,7 @@ type
     cause*: string      ## "" when the LLM answered
     detail*: string
     attempts*: int
+    evidence*: seq[JsonNode]
 
 proc resolveApiKey(): string =
   result = getEnv("ANTHROPIC_API_KEY").strip()
@@ -335,6 +336,7 @@ proc decideAll*(
     ## Seconds from a `retry-after` header on a throttled / provider-error
     ## response in the first batch; -1 when none carried a usable one.
   var backoffNote: array[Colonies, string]
+  var evidence: array[Colonies, seq[JsonNode]]
   for attempt in 0 .. 1:
     if open.len == 0 or client.disabled:
       break
@@ -410,6 +412,23 @@ proc decideAll*(
           attempts: attempt + 1
         )
         stillOpen.add(seat)
+      if getEnv("HIVE_CAPTURE_DIR").len > 0:
+        let request = parseJson(batch[position].body)
+        let system = request["system"].getStr()
+        let user = request["messages"][0]["content"].getStr()
+        evidence[seat].add(%*{
+          "attempt": attempt + 1, "request_body": batch[position].body,
+          "response_body": responses[position].response.body,
+          "response_status": responses[position].response.code,
+          "transport_error": responses[position].error,
+          "transport": $client.transport,
+          "model": (if client.transport == ltBedrock:
+            client.bedrockModels[batchModel] else: client.model),
+          "prompt_template": selection.promptMetadata(system, user),
+          "accepted": result[seat].cause.len == 0,
+          "rejection_reason": result[seat].cause,
+          "parsed_action": (if result[seat].cause.len == 0:
+            result[seat].resolved.doctrine.toJson() else: newJNull())})
     open = stillOpen
 
   for seat in open:
@@ -428,3 +447,5 @@ proc decideAll*(
     echo "hive llm: seat ", seat, " falling back to the scripted doctrine"
     result[seat].resolved = scriptedResolved(views[seat], skMarcher, turn,
       memory[seat], dsFallback)
+  for seat in 0 ..< Colonies:
+    result[seat].evidence = evidence[seat]
