@@ -59,5 +59,7 @@ improved model play or prevention of training collapse.
 
 Ordinary-player capture schema 2 retains the proposed doctrine and the
 host-normalized action receipt, plus selection and exact prompt hashes.
+Its [candidate workflow](docs/TRAINING.md) joins all four players to the
+native application log and re-simulates each replay before export.
 `players/ordinary/export.py` remains the reader for archived schema-1 data;
 it does not accept schema-2 captures.

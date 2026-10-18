@@ -52,7 +52,7 @@ class ReplyHandler(BaseHTTPRequestHandler):
         if self.server.mode == "hosted" and key not in self.server.seen:
             text = "invalid fixture reply"
         if self.server.mode == "rejected":
-            text = json.dumps({"scouts": "invalid"})
+            text = json.dumps({"invalid": True})
         self.server.seen.add(key)
         response = json.dumps(
             {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
@@ -77,6 +77,8 @@ def main() -> None:
     parser.add_argument("replay_verifier", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--candidate-panel", action="store_true")
+    parser.add_argument("--rejected-only", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     revision = subprocess.check_output(
@@ -104,8 +106,15 @@ def main() -> None:
             )
         ]
         cases.append(("sprint", "canonical", "rejected"))
-    for variant, wording, mode in cases:
-        output = args.output / f"{variant}-{wording}-{mode}"
+    seeded_cases = [(variant, wording, mode, 7) for variant, wording, mode in cases]
+    if args.candidate_panel:
+        seeded_cases = [
+            ("sprint", "canonical", "ordinary", seed) for seed in range(1, 11)
+        ]
+    if args.rejected_only:
+        seeded_cases = [("sprint", "canonical", "rejected", 7)]
+    for variant, wording, mode, seed in seeded_cases:
+        output = args.output / f"{variant}-{wording}-{mode}-{seed}"
         output.mkdir(mode=0o700)
         with socket.socket() as reserve:
             reserve.bind(("127.0.0.1", 0))
@@ -116,7 +125,7 @@ def main() -> None:
         thread.start()
         config = {
             **variants[variant],
-            "seed": 7,
+            "seed": seed,
             "promptVariant": wording,
             "promptSeed": 3,
             "tokens": [f"t{i}" for i in range(4)],
@@ -209,6 +218,7 @@ def main() -> None:
                     if key not in ("turn", "seat", "source", "latency_ms")
                 }
                 assert action == resolved["resolved_action"]
+                assert action["scouts"] != 999
                 if mode == "hosted":
                     first, second = resolved["attempts"]
                     assert not first["accepted"] and second["accepted"]

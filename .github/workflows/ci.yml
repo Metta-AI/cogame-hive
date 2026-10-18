@@ -140,7 +140,7 @@ jobs:
               fi
               echo "::group::nim r ${flags} --path:src ${t}"
               # shellcheck disable=SC2086
-              if ! nim r ${flags} --path:src "${t}"; then
+              if ! nim r ${flags} --parallelBuild:1 --path:src -o:"$RUNNER_TEMP/$(basename "${t}" .nim)-${m}" "${t}"; then
                 echo "::error::FAILED (${m}) ${t}"
                 fail=1
               fi
@@ -154,20 +154,43 @@ jobs:
           set -euo pipefail
           nim c -d:release --path:src -o:/tmp/hive-train-bridge tools/train_bridge.nim
           python3 tools/test_train_bridge.py /tmp/hive-train-bridge
+          python3 tools/test_prompt_games.py /tmp/hive-train-bridge
           nim c -d:release --path:src -o:/tmp/hive-export-posttrain tools/export_posttrain.nim
+          nim c -d:release --path:src -o:/tmp/hive-verify tools/verify_training_replay.nim
           /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-default" 10 1 default
           /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-sprint" 10 1 sprint
           python3 - "$RUNNER_TEMP" <<'PY'
           import json
           import pathlib
+          import subprocess
           import sys
 
           root = pathlib.Path(sys.argv[1])
-          for variant, train, validation in (("default", 640, 160), ("sprint", 384, 96)):
+          for variant in ("default", "sprint"):
               manifest = json.loads((root / f"hive-{variant}" / "manifest.json").read_text())
-              assert manifest["train_examples"] == train
-              assert manifest["validation_examples"] == validation
+              assert manifest["review_required"] is True and len(manifest["runs"]) == 10
+              for replay in (root / f"hive-{variant}").glob("*.replay.json"):
+                  subprocess.run(["/tmp/hive-verify", str(replay)], check=True)
           PY
+
+      - name: Native prompt protocols and candidate capture
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/hive-python"
+          "$RUNNER_TEMP/hive-python/bin/pip" install -r players/ordinary/requirements.txt
+          test -z "$(git status --porcelain)"
+          nim c -d:release --parallelBuild:1 --path:src \
+            -d:HiveSourceRevision="$(git rev-parse HEAD)" -d:HiveSourceDirty=false \
+            -o:/tmp/hive-game src/hive.nim
+          nim c -d:release --parallelBuild:1 --path:src -o:/tmp/hive-player src/hive_player.nim
+          "$RUNNER_TEMP/hive-python/bin/python" tools/test_native_prompts.py \
+            /tmp/hive-game /tmp/hive-player /tmp/hive-verify "$RUNNER_TEMP/hive-native" --smoke
+          "$RUNNER_TEMP/hive-python/bin/python" tools/test_native_prompts.py \
+            /tmp/hive-game /tmp/hive-player /tmp/hive-verify "$RUNNER_TEMP/hive-native-rejected" --rejected-only
+          "$RUNNER_TEMP/hive-python/bin/python" tools/test_native_prompts.py \
+            /tmp/hive-game /tmp/hive-player /tmp/hive-verify "$RUNNER_TEMP/hive-native-candidates" --candidate-panel
+          "$RUNNER_TEMP/hive-python/bin/python" tools/test_capture_candidates.py \
+            "$RUNNER_TEMP/hive-native-candidates" /tmp/hive-verify "$RUNNER_TEMP/hive-candidates"
 
       # Acceptance checklist item 7: "the baseline's parameters were tuned
       # with a grid harness, not guessed". This is that harness. Release only

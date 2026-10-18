@@ -102,6 +102,30 @@ def play(binary, variant, wording, seed, language, prompt_seed=0, original=False
 
 if __name__ == "__main__":
     binary = Path(sys.argv[1]).resolve()
+    for wording in WORDINGS[-2:]:
+        rejected = subprocess.run(
+            [
+                str(binary),
+                str(ROOT / "coworld_manifest_template.json"),
+                "default",
+                str(ROOT / "data/meadow.fieldspec.json"),
+                "--language",
+            ],
+            input=json.dumps(
+                {
+                    "kind": "reset",
+                    "players": 4,
+                    "seed": 7,
+                    "promptVariant": wording,
+                    "split": "train",
+                }
+            )
+            + "\n",
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        assert rejected.returncode != 0 and "held-out" in rejected.stderr
     count = 0
     for variant in ("default", "sprint"):
         for language in (False, True):
