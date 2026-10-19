@@ -34,14 +34,12 @@ import bitworld/runtime
 import curly
 import mummy, mummy/routers
 import types, config, field, doctrine, baselines, roster, sim, rules,
-  broadcast, global, llm, replay, state, events, prompts, evidence
+  broadcast, global, llm, replay, state, events, prompts
 
 const
   ShutdownGraceSeconds* = 20.0
   DoneBroadcastSeconds* = 3.0
   PlayBudgetFraction* = 0.6
-  HiveSourceRevision {.strdefine.} = "unknown"
-  HiveSourceDirty {.booldefine.} = true
 
 type
   GameState = object
@@ -205,14 +203,6 @@ var gameThread: Thread[RuntimeConfig]
 proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
   {.gcsafe.}:
     let gameConfig = game.config
-    let captureDirectory = getEnv("HIVE_CAPTURE_DIR")
-    let trace = captureDirectory / "host.jsonl"
-    if captureDirectory.len > 0:
-      writePrivate(trace, $(%*{"event_type": "host_started", "visibility": "private",
-        "source_revision": HiveSourceRevision,
-        "source_dirty": HiveSourceDirty,
-        "config": parseJson(runtimeConfig.config),
-        "prompt_selection": game.selection.selectionMetadata()}) & "\n")
     let gameStart = epochTime()
     let connectDeadline = gameStart + gameConfig.playerConnectTimeoutSeconds
 
@@ -394,20 +384,13 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             try:
               sockets[seat].send($(%*{
                 "type": "decision_result", "turn": turn,
-                "accepted": outcomes[seat].cause.len == 0,
-                "action": outcomes[seat].resolved.doctrine.toJson()
+                "accepted": outcomes[seat].cause.len == 0
               }))
             except CatchableError:
               discard
 
       for seat in 0 ..< Colonies:
         result[seat] = outcomes[seat].resolved
-        if captureDirectory.len > 0:
-          appendPrivate(trace, %*{"event_type": "decision_resolved", "visibility": "private",
-            "turn": turn, "seat": seat, "view": buildView(match, seat),
-            "external": external[seat], "attempts": outcomes[seat].evidence,
-            "resolved_action": result[seat].doctrine.toJson(),
-            "source": $result[seat].source, "cause": outcomes[seat].cause})
         if outcomes[seat].resolved.source == dsLlm:
           turnsLlm[seat].inc
         if outcomes[seat].cause.len > 0 and scripted[seat] == skNone:
@@ -455,12 +438,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       results = resultsJson(game.match, names, kinds, turnsLlm,
         fallbackTurns, fallbackCauses)
       replayBytes = $buildReplay(game.match, names, kinds, results)
-      if captureDirectory.len > 0:
-        for installed in game.match.doctrineLog:
-          appendPrivate(trace, %*{"event_type": "action_applied", "visibility": "private",
-            "doctrine": installed})
-        appendPrivate(trace, %*{"event_type": "host_completed", "visibility": "private",
-          "result": results})
       game.finished = true
 
       ## Write order: `done` to every seat FIRST (the hosted worker tears

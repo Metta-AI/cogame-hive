@@ -6,8 +6,6 @@ import unittest
 
 from player import choose
 from policy import ScriptedPolicy
-from prompts import PromptSelection
-
 
 VIEW = {
     "turn": 3,
@@ -19,19 +17,26 @@ VIEW = {
 
 class PlayerPolicyTest(unittest.TestCase):
     def test_scripted_choice_uses_private_view(self) -> None:
-        choice = choose(
-            {"view": VIEW},
+        action, source, _, user = choose(
+            {
+                "view": VIEW,
+                "prompt_selection": {
+                    "bank": "hive-rules-v2",
+                    "variant": "canonical",
+                    "selection": "canonical",
+                    "seed": 0,
+                },
+            },
             None,
             ScriptedPolicy(),
             ScriptedPolicy("driftling"),
             "",
             "marcher",
-            PromptSelection(),
         )
-        self.assertEqual(choice.source, "scripted")
-        self.assertEqual(choice.action["focus"], [9, 5])
-        self.assertEqual(choice.action["note"], "marcher: pump")
-        self.assertIn('"amount_seen": 41', choice.user)
+        self.assertEqual(source, "scripted")
+        self.assertEqual(action["focus"], [9, 5])
+        self.assertEqual(action["note"], "marcher: pump")
+        self.assertIn('"amount_seen": 41', user)
 
 
 if __name__ == "__main__":

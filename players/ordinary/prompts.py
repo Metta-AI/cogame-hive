@@ -26,39 +26,33 @@ TRAIN: tuple[Wording, ...] = (
 
 
 class PromptBank(BaseModel):
-    version: Literal["hive-rules-v1"]
-    introductions: dict[Wording, str]
+    version: Literal["hive-rules-v2"]
+    briefings: dict[Wording, str]
+    reply: str
 
 
-BANK = PromptBank.model_validate_json(
-    Path(__file__).with_name("prompt_bank.json").read_text()
-)
+BANK = PromptBank.model_validate_json(Path(__file__).with_name("prompt_bank.json").read_text())
 CANONICAL = Path(__file__).with_name("system_prompt.txt").read_text()
-assert CANONICAL.startswith(BANK.introductions["canonical"])
+assert CANONICAL == BANK.briefings["canonical"] + BANK.reply
 
 
 class PromptSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    bank: Literal["hive-rules-v1"] = "hive-rules-v1"
+    bank: Literal["hive-rules-v2"] = "hive-rules-v2"
     variant: Wording = "canonical"
     selection: Variant = "canonical"
     seed: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_selection(self) -> Self:
-        expected = (
-            TRAIN[self.seed % len(TRAIN)]
-            if self.selection == "mixed"
-            else self.selection
-        )
+        expected = TRAIN[self.seed % len(TRAIN)] if self.selection == "mixed" else self.selection
         if self.variant != expected:
             raise ValueError("resolved wording differs from episode selection")
         return self
 
     def system_prompt(self) -> str:
-        prefix = BANK.introductions["canonical"]
-        return BANK.introductions[self.variant] + CANONICAL[len(prefix) :]
+        return BANK.briefings[self.variant] + BANK.reply
 
     def metadata(self, system: str, user: str) -> dict:
         return {

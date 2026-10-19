@@ -277,6 +277,14 @@ assert results["reason"] == "complete"
 assert results["policy_kinds"][0] == "scripted"
 assert trajectory["scores"] == results["scores"]
 assert trajectory["decisions"]
+config = json.loads((work / "config.json").read_text())
+if "promptVariant" in config:
+    for row in trajectory["decisions"]:
+        assert row["prompt_template"]["selection"] == config["promptVariant"]
+        assert row["prompt_template"]["seed"] == config["promptSeed"]
+        if config["promptVariant"] == "mixed" and config["promptSeed"] == 4:
+            assert row["prompt_template"]["variant"] == "reordered"
+            assert row["prompt"][0]["content"].startswith("SCORING\n")
 assert all(row["source"] == "scripted" for row in trajectory["decisions"])
 assert sum(row["source"] == "scripted" for row in replay["doctrines"] if row["seat"] == 0) == len(trajectory["decisions"])
 print(f"ordinary player accepted {len(trajectory['decisions'])} doctrines")

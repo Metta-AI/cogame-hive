@@ -58,6 +58,10 @@ def export(
                     "game": "hive",
                     "action_schema_revision": "hive-doctrine-v1",
                 }
+                if "prompt_template" in row:
+                    if row["prompt_template"]["variant"].startswith("heldout-"):
+                        raise ValueError("held-out wording cannot enter training exports")
+                    example["prompt_template"] = row["prompt_template"]
                 splits[split].append(json.dumps(example, ensure_ascii=False))
                 count += 1
         if count == 0:
@@ -68,9 +72,7 @@ def export(
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     for split, rows in splits.items():
         path = output / f"{split}.jsonl"
-        with os.fdopen(
-            os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w"
-        ) as destination:
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as destination:
             destination.write("\n".join(rows) + "\n")
     manifest = {
         "schema_version": 1,
@@ -97,11 +99,7 @@ if __name__ == "__main__":
     directories = [
         episode
         for run in args.runs
-        for episode in (
-            sorted(run.glob("episode-*"))
-            if not (run / "results.json").exists()
-            else [run]
-        )
+        for episode in (sorted(run.glob("episode-*")) if not (run / "results.json").exists() else [run])
     ]
     print(
         export(

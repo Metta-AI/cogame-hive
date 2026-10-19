@@ -17,7 +17,7 @@ type
     seed*: int
 
 const
-  PromptBankVersion* = "hive-rules-v1"
+  PromptBankVersion* = "hive-rules-v2"
 
 proc promptSelection*(node: JsonNode): PromptSelection =
   if node.kind != JObject:
@@ -55,7 +55,5 @@ const
 proc systemPrompt*(selection: PromptSelection): string =
   let bank = parseJson(PromptBank)
   doAssert bank["version"].getStr() == PromptBankVersion
-  let introductions = bank["introductions"]
-  let prefix = introductions["canonical"].getStr()
-  doAssert CanonicalSystemPrompt.startsWith(prefix)
-  introductions[$selection.selectedVariant].getStr() & CanonicalSystemPrompt[prefix.len .. ^1]
+  doAssert CanonicalSystemPrompt == bank["briefings"]["canonical"].getStr() & bank["reply"].getStr()
+  bank["briefings"][$selection.selectedVariant].getStr() & bank["reply"].getStr()

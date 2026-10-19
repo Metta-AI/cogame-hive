@@ -23,43 +23,30 @@ The scripted `marcher` baseline is available through the bridge's `teacher`
 request. The hosted language player can still write notes and a short public
 line; the numeric bridge uses empty strings for those fields.
 
-## Prompt selection and private candidates
+## Prompt selection and complete exports
 
-Five training introductions (`canonical`, `plain`, `numbered`, `questions`,
-`reordered`) and two held-out introductions (`heldout-briefing`,
-`heldout-reference`) share one JSON bank between native and Python players.
-The original system prompt remains the canonical text. `mixed` uses
-`promptSeed % 5` without consuming simulation randomness.
+The `hive-rules-v2` JSON bank shares complete rule presentations between Nim
+and Python players. Five training wordings are `canonical`, `plain`, `numbered`,
+`questions`, and `reordered`; `heldout-briefing` and `heldout-reference` are
+reserved for evaluation. Canonical messages and the doctrine schema stay exact.
 
-Set `promptVariant` and `promptSeed` in game configuration or bridge reset.
-Selection remains fixed for the episode. The host sends it only in private
-player envelopes. Append `--language` to the bridge command for complete
-doctrines, notes and spectator lines through the production parser.
-Numeric features and action heads remain unchanged. Training reset rejects
-held-out wording.
-
-The native exporter writes private `trajectories.jsonl`, a review-required
-manifest, and per-game replay files. It requires a clean committed checkout.
-Each candidate retains exact prompts and hashes, its teacher proposal, and
-the doctrine actually installed. No automatic train/validation split or
-success label is assigned. The shared importer and independent review own
-admission; `hive-SEED` families group all variants and wording replicas.
+`mixed` requires an independent nonnegative `promptSeed` and selects seed modulo
+five. Selection stays fixed throughout an episode; teacher exports cycle
+wordings between episodes. Training resets and exports reject held-out wording.
+The game sends selection to ordinary players; deploy game and players together.
 
 ```sh
 nim c -d:release --path:src -o:/tmp/hive-posttrain tools/export_posttrain.nim
-/tmp/hive-posttrain /tmp/hive-candidates 10 1 default mixed 3
-nim c -d:release --path:src -o:/tmp/hive-verify tools/verify_training_replay.nim
-/tmp/hive-verify /tmp/hive-candidates/hive-1-default-questions.replay.json
+/tmp/hive-posttrain /tmp/hive-dataset 10 1 default mixed 0
 ```
 
-Replay verification re-runs the production runtime and checks every digest
-and recorded ant byte. Held-out wording is evaluation-only and cannot be
-exported as a training candidate. Deterministic checks do not demonstrate
-improved model play or prevention of training collapse.
+The original train.jsonl, validation.jsonl, and manifest format is retained.
+Every fifth game is validation; `hive-SEED` groups mode and wording replicas.
+Prompt metadata includes hashes of actual messages. Both variants retain their
+published budgets. See the [ordinary-player workflow](docs/TRAINING.md).
 
-Ordinary-player capture schema 2 retains the proposed doctrine and the
-host-normalized action receipt, plus selection and exact prompt hashes.
-Its [candidate workflow](docs/TRAINING.md) joins all four players to the
-native application log and re-simulates each replay before export.
-`players/ordinary/export.py` remains the reader for archived schema-1 data;
-it does not accept schema-2 captures.
+Deterministic checks establish preserved gameplay, not stronger learned play.
+Compare canonical-only and mixed training using identical initialization,
+optimizer, decision budgets, opponents, and scenario families. Freeze training
+choices before evaluating held-out wordings; report score spread, invalid
+outputs, fallbacks, and incomplete games, then inspect paired regressions.
