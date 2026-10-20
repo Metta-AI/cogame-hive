@@ -25,15 +25,16 @@ line; the numeric bridge uses empty strings for those fields.
 
 ## Prompt selection and complete exports
 
-The `hive-rules-v2` JSON bank shares complete rule presentations between Nim
+The `hive-rules-v3` JSON bank shares complete rule presentations between Nim
 and Python players. Five training wordings are `canonical`, `plain`, `numbered`,
 `questions`, and `reordered`; `heldout-briefing` and `heldout-reference` are
-reserved for evaluation. Canonical messages and the doctrine schema stay exact.
+reserved for evaluation. The canonical briefing corrects the central-cache count for sprint. The doctrine
+schema stays exact. Alternatives use independent explanations, not reordered paragraphs.
 
 `mixed` requires an independent nonnegative `promptSeed` and selects seed modulo
 five. Selection stays fixed throughout an episode; teacher exports cycle
 wordings independently within training and validation. Episode IDs include
-wording to distinguish matched collections. Training resets and exports reject held-out wording.
+requested selection, resolved wording, and prompt seed to distinguish matched collections. Training resets and exports reject held-out wording.
 The game sends selection to ordinary players; deploy game and players together.
 
 ```sh

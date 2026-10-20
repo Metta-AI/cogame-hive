@@ -21,7 +21,7 @@ class PlayerPolicyTest(unittest.TestCase):
             {
                 "view": VIEW,
                 "prompt_selection": {
-                    "bank": "hive-rules-v2",
+                    "bank": "hive-rules-v3",
                     "variant": "canonical",
                     "selection": "canonical",
                     "seed": 0,

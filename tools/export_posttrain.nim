@@ -60,7 +60,7 @@ when isMainModule:
         doAssert parsed == teacher
         rows.add($(%*{
           "episode_id": "hive-" & variant & "-" & $seed & "-" &
-            selection.selectionMetadata()["variant"].getStr(),
+            $selection.variant & "-" & $selection.selectedVariant & "-" & $selection.seed,
           "seed": "hive-" & $seed,
           "prompt_template": selection.promptMetadata(selection.systemPrompt(), userMessage(sim, seat, OperatorPrompt)),
           "decision_id": rows.len,

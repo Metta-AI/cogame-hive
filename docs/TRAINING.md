@@ -32,18 +32,13 @@ nim c -d:release --path:src -o:/tmp/hive-posttrain tools/export_posttrain.nim
 
 The other certified variant is `sprint`. Both methods emit Metta
 post-training JSONL with player-constructed prompts and complete accepted actions.
-From a Metta checkout with the post-training package installed:
-
-```sh
-uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
-  --dataset /tmp/hive-dataset --output /tmp/hive-adapter \
-  --model Qwen/Qwen3-0.6B --max-steps 100 --max-length 4096
-```
+Use the [post-training research package](https://github.com/Metta-AI/posttraining-research/tree/main/packages/metta-posttraining)
+for training configuration and adapter packaging.
 
 ## Episode wording
 
 The game supplies prompt selection privately. The player renders the shared
-`hive-rules-v2` bank, varying complete rule explanations and ordering while
+`hive-rules-v3` bank, varying complete rule explanations and ordering while
 keeping reply syntax fixed. Deploy game and ordinary player together.
 
 Accepted captures retain the original version-one artifact format. New rows

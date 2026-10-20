@@ -26,7 +26,7 @@ TRAIN: tuple[Wording, ...] = (
 
 
 class PromptBank(BaseModel):
-    version: Literal["hive-rules-v2"]
+    version: Literal["hive-rules-v3"]
     briefings: dict[Wording, str]
     reply: str
 
@@ -39,7 +39,7 @@ assert CANONICAL == BANK.briefings["canonical"] + BANK.reply
 class PromptSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    bank: Literal["hive-rules-v2"] = "hive-rules-v2"
+    bank: Literal["hive-rules-v3"] = "hive-rules-v3"
     variant: Wording = "canonical"
     selection: Variant = "canonical"
     seed: int = Field(default=0, ge=0)

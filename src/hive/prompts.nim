@@ -17,7 +17,7 @@ type
     seed*: int
 
 const
-  PromptBankVersion* = "hive-rules-v2"
+  PromptBankVersion* = "hive-rules-v3"
 
 proc promptSelection*(node: JsonNode): PromptSelection =
   if node.kind != JObject:

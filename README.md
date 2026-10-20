@@ -55,8 +55,8 @@ brightening as a road pays and dimming as it dies, the home trail a
 desaturated layer underneath it. Ant flows read like traffic. Nest counters
 pulse on every delivery. When two colonies' roads meet in the same 8 × 8 block
 the contested block flashes a hatched two-colour overlay and the banner lane
-reads `TRAIL WAR — Amber vs Teal over block 9,5`. Twice a match a four-hundred
-unit cache lands dead centre and everybody goes for it.
+reads `TRAIL WAR — Amber vs Teal over block 9,5`. A four-hundred-unit cache lands dead centre twice in the default match
+and once in sprint.
 
 The replay is a **static wasm bundle**: the viewer re-runs the same integer sim
 from the recorded doctrine stream in the browser and verifies its own
