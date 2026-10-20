@@ -22,7 +22,10 @@ python3 players/ordinary/export.py /tmp/hive-dataset \
 ```
 
 The exporter splits whole seeds into train and validation, rejects deadline
-and fault endings, and checks source revision and game scores. Output uses
+and fault endings, and checks source revision and game scores. Matched wording
+runs may share a seed and stay in the same split. Episode IDs include a hash
+of the complete captured trajectory; duplicate captures are rejected. This
+also distinguishes stored version-one captures without prompt metadata. Output uses
 `hive-doctrine-v1`, matching the native exporter:
 
 ```sh
