@@ -19,11 +19,10 @@ class Capture:
         self.upload_url = os.environ["COWORLD_PLAYER_ARTIFACT_UPLOAD_URL"]
         self.rows: list[dict] = []
 
-    def record(
-        self, system: str, user: str, action: dict, source: str, tick: int
-    ) -> None:
+    def record(self, system: str, user: str, action: dict, source: str, tick: int, prompt_template: dict) -> None:
         self.rows.append(
             {
+                "prompt_template": prompt_template,
                 "decision_id": len(self.rows),
                 "tick": tick,
                 "source": source,
@@ -31,9 +30,7 @@ class Capture:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "completion": [
-                    {"role": "assistant", "content": json.dumps(action, sort_keys=True)}
-                ],
+                "completion": [{"role": "assistant", "content": json.dumps(action, sort_keys=True)}],
             }
         )
 
@@ -61,7 +58,8 @@ class Capture:
         if url.scheme == "file":
             target = Path(unquote(url.path))
             pending = target.with_name(target.name + ".tmp")
-            pending.write_bytes(data)
+            with os.fdopen(os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output:
+                output.write(data)
             os.replace(pending, target)
         else:
             request = urllib.request.Request(

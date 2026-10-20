@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-SYSTEM = (Path(__file__).with_name("system_prompt.txt")).read_text()
+from prompts import PromptSelection
 
 
 class ScriptedPolicy:
@@ -66,5 +64,5 @@ class ScriptedPolicy:
                 "note": note, "say": ""}
 
 
-def prompt_for(view: dict, strategy: str) -> tuple[str, str]:
-    return SYSTEM, strategy.strip()[:4000] + "\n\n" + json.dumps(view, indent=1, ensure_ascii=False)
+def prompt_for(view: dict, strategy: str, selection: PromptSelection) -> tuple[str, str]:
+    return selection.system_prompt(), strategy.strip()[:4000] + "\n\n" + json.dumps(view, indent=1, ensure_ascii=False)

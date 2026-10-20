@@ -22,7 +22,10 @@ python3 players/ordinary/export.py /tmp/hive-dataset \
 ```
 
 The exporter splits whole seeds into train and validation, rejects deadline
-and fault endings, and checks source revision and game scores. Output uses
+and fault endings, and checks source revision and game scores. Matched wording
+runs may share a seed and stay in the same split. Episode IDs include a hash
+of the complete captured trajectory; duplicate captures are rejected. This
+also distinguishes stored version-one captures without prompt metadata. Output uses
 `hive-doctrine-v1`, matching the native exporter:
 
 ```sh
@@ -32,10 +35,17 @@ nim c -d:release --path:src -o:/tmp/hive-posttrain tools/export_posttrain.nim
 
 The other certified variant is `sprint`. Both methods emit Metta
 post-training JSONL with player-constructed prompts and complete accepted actions.
-From a Metta checkout with the post-training package installed:
+Use the [post-training research package](https://github.com/Metta-AI/posttraining-research/tree/main/packages/metta-posttraining)
+for training configuration and adapter packaging.
 
-```sh
-uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
-  --dataset /tmp/hive-dataset --output /tmp/hive-adapter \
-  --model Qwen/Qwen3-0.6B --max-steps 100 --max-length 4096
-```
+## Episode wording
+
+The game supplies prompt selection privately. The player renders the shared
+`hive-rules-v3` bank, varying complete rule explanations and ordering while
+keeping reply syntax fixed. Deploy game and ordinary player together.
+
+Accepted captures retain the original version-one artifact format. New rows
+include selection metadata and actual prompt hashes; existing stored rows
+without metadata remain readable. Held-out wording is rejected for training.
+Local private artifacts use owner-only permissions. See [selection and teacher
+exports](../TRAINING.md).

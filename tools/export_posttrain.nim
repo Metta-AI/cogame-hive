@@ -2,19 +2,22 @@
 ## nim r --path:src tools/export_posttrain.nim OUTPUT GAMES [FIRST_SEED] [VARIANT]
 
 import std/[json, os, osproc, strutils]
-import hive/[baselines, broadcast, config, doctrine, field, llm, rules, types]
+import hive/[baselines, broadcast, config, doctrine, field, llm, rules, types, prompts]
 
 const OperatorPrompt = "Choose a doctrine that maximizes your colony's share of food over the complete match."
 const Variants = ["default", "sprint"]
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len notin 2 .. 4:
-    quit("usage: export_posttrain OUTPUT GAMES [FIRST_SEED] [VARIANT]", 1)
+  if args.len notin [2, 3, 4, 6]:
+    quit("usage: export_posttrain OUTPUT GAMES [FIRST_SEED] [VARIANT] [PROMPT_VARIANT PROMPT_SEED]", 1)
+  let configured = promptSelection(if args.len == 6:
+    %*{"promptVariant": args[4], "promptSeed": parseInt(args[5])} else: newJObject())
+  doAssert configured.selectedVariant notin {pvHeldoutBriefing, pvHeldoutReference}, "held-out wording is evaluation only"
   let output = args[0]
   let games = parseInt(args[1])
   let firstSeed = if args.len >= 3: parseInt(args[2]) else: 1
-  let variant = if args.len == 4: args[3] else: Variants[0]
+  let variant = if args.len >= 4: args[3] else: Variants[0]
   if games < 10 or firstSeed < 1:
     quit("at least ten games and a positive first seed are required", 1)
   if variant notin Variants:
@@ -31,7 +34,13 @@ when isMainModule:
   doAssert not variantConfig.isNil
   var trainRows, validationRows: seq[string]
   var runs = newJArray()
+  var wordingCounts: array[2, int]
   for seed in firstSeed ..< firstSeed + games:
+    var selection = configured
+    let partition = ord(seed mod 5 == 0)
+    if selection.variant == pvMixed:
+      selection.seed += wordingCounts[partition]
+      inc wordingCounts[partition]
     var config = defaultGameConfig()
     let runtimeConfig = copy(variantConfig)
     runtimeConfig["tokens"] = %*["t0", "t1", "t2", "t3"]
@@ -50,11 +59,13 @@ when isMainModule:
           sim.hasDoctrine[colony])
         doAssert parsed == teacher
         rows.add($(%*{
-          "episode_id": "hive-" & variant & "-" & $seed,
-          "seed": "hive-" & variant & "-" & $seed,
+          "episode_id": "hive-" & variant & "-" & $seed & "-" &
+            $selection.variant & "-" & $selection.selectedVariant & "-" & $selection.seed,
+          "seed": "hive-" & $seed,
+          "prompt_template": selection.promptMetadata(selection.systemPrompt(), userMessage(sim, seat, OperatorPrompt)),
           "decision_id": rows.len,
           "prompt": [
-            {"role": "system", "content": SystemPrompt},
+            {"role": "system", "content": selection.systemPrompt()},
             {"role": "user", "content": userMessage(sim, seat,
               OperatorPrompt)}
           ],

@@ -48,10 +48,10 @@ the ground.
     is free floor at Chebyshev distance ≥ 14 from every nest centre and ≥ 3
     from every live source) plus its three mirror images. Each of the four
     sources carries 60 units and lives 1440 ticks.
-  - **Bonanzas.** At ticks 1200 and 3600, four sources spawn on the exact
+  - **Bonanzas.** At ticks 1200 and 3600 in default (only 1200 in sprint), four sources spawn on the exact
     centre block — (79, 43), (80, 43), (79, 44), (80, 44) — each with 100 units
     and a 900-tick life. Equidistant from all four nests, and the reason the
-    middle of the meadow becomes a battlefield twice per match.
+    middle of the meadow becomes contested at those times.
 
 ## The ant kernel
 

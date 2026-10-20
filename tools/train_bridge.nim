@@ -2,12 +2,15 @@
 ## nim c -d:release --path:src -o:hive-train-bridge tools/train_bridge.nim
 
 import std/[json, os]
-import hive/[baselines, broadcast, config, doctrine, field, llm, rules, types]
+import hive/[baselines, broadcast, config, doctrine, field, llm, rules, types, prompts]
 
 const
   OperatorPrompt = "Choose a doctrine that maximizes your colony's share of food over the complete match."
   Variants = ["default", "sprint"]
   PercentFields = ["scouts", "trail_gain", "poach", "spread", "lay_food", "lay_home"]
+
+var selection: PromptSelection
+var languageMode = false
 
 proc seedOf(value: string): int =
   var hash = 2166136261'u32
@@ -52,18 +55,21 @@ proc hostedAction(chosen: JsonNode): JsonNode =
 
 proc decision(game: Sim, seat, id: int): JsonNode =
   let view = buildView(game, seat)
+  let system = selection.systemPrompt()
+  let user = userMessage(game, seat, OperatorPrompt)
+  view["prompt_template"] = selection.promptMetadata(system, user)
   let catalog = heads()
   var fields = newJObject()
   for head in catalog:
     fields[head["name"].getStr()] = %*{"enum": head["choices"]}
-  %*{
+  result = %*{
     "kind": "decision", "game": "hive", "decision_id": id,
     "seat": seat, "engine_seat": seat, "turn": game.turn,
     "semantic_view": view,
     "inbox": [],
     "messages": [
-      {"role": "system", "content": SystemPrompt},
-      {"role": "user", "content": userMessage(game, seat, OperatorPrompt)}
+      {"role": "system", "content": system},
+      {"role": "user", "content": user}
     ],
     "speech_messages": [],
     "action_schema": {"type": "object", "properties": fields,
@@ -72,6 +78,15 @@ proc decision(game: Sim, seat, id: int): JsonNode =
         "focus_weight"]},
     "typed_question": newJNull()
   }
+  if languageMode:
+    result["inference_mode"] = %"text_action"
+    result["action_schema"] = %*{"type": "object", "properties": {
+      "scouts": {"type": "integer"}, "trail_gain": {"type": "integer"},
+      "poach": {"type": "integer"}, "spread": {"type": "integer"},
+      "lay_food": {"type": "integer"}, "lay_home": {"type": "integer"},
+      "recall": {"type": "boolean"}, "focus": {"type": ["array", "null"]},
+      "focus_weight": {"type": "integer"}, "note": {"type": "string"},
+      "say": {"type": "string"}}}
 
 proc gridValue(ch: char): int =
   if ch == '.': -1
@@ -130,8 +145,11 @@ proc encoding(game: Sim, seat, id: int, variant: string): JsonNode =
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len != 3:
-    quit("usage: hive-train-bridge MANIFEST VARIANT FIELD_SPEC", 1)
+  if args.len notin 3 .. 4:
+    quit("usage: hive-train-bridge MANIFEST VARIANT FIELD_SPEC [--language]", 1)
+  if args.len == 4:
+    doAssert args[3] == "--language"
+    languageMode = true
   let variant = args[1]
   let manifest = parseFile(args[0])
   let meadow = parseFieldSpec(parseFile(args[2]))
@@ -152,6 +170,11 @@ when isMainModule:
     case request["kind"].getStr()
     of "reset":
       doAssert request["players"].getInt() == Colonies
+      selection = promptSelection(request)
+      if selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+        doAssert request.hasKey("split") and
+          request["split"].getStr() in ["evaluation", "validation", "test"],
+          "held-out wording requires an explicit evaluation split"
       var config = defaultGameConfig()
       let runtimeConfig = copy(variantConfig)
       runtimeConfig["tokens"] = %*["t0", "t1", "t2", "t3"]
@@ -172,19 +195,26 @@ when isMainModule:
       response = game.encoding(seat, id, variant)
     of "teacher":
       doAssert not game.finished
-      response = %*{"response": $action(teacher[seat])}
+      response = %*{"response": $(if languageMode: teacher[seat].toJson() else: action(teacher[seat]))}
     of "step":
       doAssert not game.finished and request["decision_id"].getInt() == id
-      let chosen = parseJson(request["response"].getStr())
-      for head in heads():
-        let name = head["name"].getStr()
-        doAssert chosen[name] in head["choices"], "action is masked: " & name
       let colony = game.nestOfSeat(seat)
-      let parsed = parseDoctrine($hostedAction(chosen),
-        game.doctrines[colony], game.hasDoctrine[colony])
+      var chosen: JsonNode
+      var parsed: Doctrine
+      if languageMode:
+        parsed = parseDoctrine(request["response"].getStr(),
+          game.doctrines[colony], game.hasDoctrine[colony])
+        chosen = parsed.toJson()
+      else:
+        chosen = parseJson(request["response"].getStr())
+        for head in heads():
+          let name = head["name"].getStr()
+          doAssert chosen[name] in head["choices"], "action is masked: " & name
+        parsed = parseDoctrine($hostedAction(chosen),
+          game.doctrines[colony], game.hasDoctrine[colony])
       doAssert parsed.isLegal()
       batch[seat] = ResolvedDoctrine(doctrine: parsed,
-        source: dsScripted, latencyMs: 0)
+        source: (if languageMode: dsExternal else: dsScripted), latencyMs: 0)
       inc seat
       if seat == Colonies:
         game.installDoctrines(batch)

@@ -154,6 +154,7 @@ jobs:
           set -euo pipefail
           nim c -d:release --path:src -o:/tmp/hive-train-bridge tools/train_bridge.nim
           python3 tools/test_train_bridge.py /tmp/hive-train-bridge
+          python3 tools/test_prompt_games.py /tmp/hive-train-bridge
           nim c -d:release --path:src -o:/tmp/hive-export-posttrain tools/export_posttrain.nim
           /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-default" 10 1 default
           /tmp/hive-export-posttrain "$RUNNER_TEMP/hive-sprint" 10 1 sprint
