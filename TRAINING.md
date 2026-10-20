@@ -51,3 +51,6 @@ Compare canonical-only and mixed training using identical initialization,
 optimizer, decision budgets, opponents, and scenario families. Freeze training
 choices before evaluating held-out wordings; report score spread, invalid
 outputs, fallbacks, and incomplete games, then inspect paired regressions.
+
+Held-out bridge wordings require an explicit `evaluation`, `validation`, or `test`
+split. Omitted, training, and unrecognized splits reject them.
