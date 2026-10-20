@@ -32,7 +32,8 @@ reserved for evaluation. Canonical messages and the doctrine schema stay exact.
 
 `mixed` requires an independent nonnegative `promptSeed` and selects seed modulo
 five. Selection stays fixed throughout an episode; teacher exports cycle
-wordings between episodes. Training resets and exports reject held-out wording.
+wordings independently within training and validation. Episode IDs include
+wording to distinguish matched collections. Training resets and exports reject held-out wording.
 The game sends selection to ordinary players; deploy game and players together.
 
 ```sh

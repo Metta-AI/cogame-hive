@@ -34,9 +34,13 @@ when isMainModule:
   doAssert not variantConfig.isNil
   var trainRows, validationRows: seq[string]
   var runs = newJArray()
+  var wordingCounts: array[2, int]
   for seed in firstSeed ..< firstSeed + games:
     var selection = configured
-    if selection.variant == pvMixed: selection.seed += seed - firstSeed
+    let partition = ord(seed mod 5 == 0)
+    if selection.variant == pvMixed:
+      selection.seed += wordingCounts[partition]
+      inc wordingCounts[partition]
     var config = defaultGameConfig()
     let runtimeConfig = copy(variantConfig)
     runtimeConfig["tokens"] = %*["t0", "t1", "t2", "t3"]
@@ -55,7 +59,8 @@ when isMainModule:
           sim.hasDoctrine[colony])
         doAssert parsed == teacher
         rows.add($(%*{
-          "episode_id": "hive-" & variant & "-" & $seed,
+          "episode_id": "hive-" & variant & "-" & $seed & "-" &
+            selection.selectionMetadata()["variant"].getStr(),
           "seed": "hive-" & $seed,
           "prompt_template": selection.promptMetadata(selection.systemPrompt(), userMessage(sim, seat, OperatorPrompt)),
           "decision_id": rows.len,
