@@ -86,7 +86,7 @@
 // the lantern deadlock, and it is the whole point of this file.
 
 import { createServer } from "node:http";
-import { createReadStream, existsSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 import process from "node:process";
 
@@ -109,23 +109,40 @@ function parseArgs(argv) {
       return value;
     };
     switch (arg) {
-      case "--bundle": out.bundle = resolve(next()); break;
-      case "--replay": out.replay = resolve(next()); break;
-      case "--url": out.url = next(); break;
-      case "--timeout": out.timeout = Number(next()); break;
-      case "--out": out.outDir = resolve(next()); break;
-      case "--headed": out.headed = true; break;
+      case "--bundle":
+        out.bundle = resolve(next());
+        break;
+      case "--replay":
+        out.replay = resolve(next());
+        break;
+      case "--url":
+        out.url = next();
+        break;
+      case "--timeout":
+        out.timeout = Number(next());
+        break;
+      case "--out":
+        out.outDir = resolve(next());
+        break;
+      case "--headed":
+        out.headed = true;
+        break;
       case "-h":
       case "--help":
-        die(0, "usage: viewer_smoke.mjs (--bundle <dir> --replay <file> | --url <url>) [--timeout 60] [--out dir]");
+        die(
+          0,
+          "usage: viewer_smoke.mjs (--bundle <dir> --replay <file> | --url <url>) [--timeout 60] [--out dir]",
+        );
         break;
-      default: die(2, `unknown argument: ${arg}`);
+      default:
+        die(2, `unknown argument: ${arg}`);
     }
   }
   if (!out.url && !out.bundle) die(2, "one of --bundle or --url is required");
   if (out.url && out.bundle) die(2, "--bundle and --url are mutually exclusive");
   if (out.bundle && !out.replay) die(2, "--bundle requires --replay");
-  if (!Number.isFinite(out.timeout) || out.timeout <= 0) die(2, "--timeout must be a positive number of seconds");
+  if (!Number.isFinite(out.timeout) || out.timeout <= 0)
+    die(2, "--timeout must be a positive number of seconds");
   return out;
 }
 
@@ -135,7 +152,9 @@ const args = parseArgs(process.argv.slice(2));
 // Playwright, pinned. Resolved late so --help works without it installed.
 // --------------------------------------------------------------------------
 async function loadChromium() {
-  const candidates = [process.env.PLAYWRIGHT_MODULE, "playwright", "playwright-core"].filter(Boolean);
+  const candidates = [process.env.PLAYWRIGHT_MODULE, "playwright", "playwright-core"].filter(
+    Boolean,
+  );
   const errors = [];
   for (const candidate of candidates) {
     try {
@@ -146,12 +165,14 @@ async function loadChromium() {
       errors.push(`${candidate}: ${error && error.message}`);
     }
   }
-  die(2,
+  die(
+    2,
     "could not load Playwright. Install the pinned version:\n" +
-    "  npm install --no-save playwright@1.55.0\n" +
-    "  npx --yes playwright@1.55.0 install --with-deps chromium\n" +
-    "(or point PLAYWRIGHT_MODULE at an installed copy)\n" +
-    errors.map((e) => `  tried ${e}`).join("\n"));
+      "  npm install --no-save playwright@1.55.0\n" +
+      "  npx --yes playwright@1.55.0 install --with-deps chromium\n" +
+      "(or point PLAYWRIGHT_MODULE at an installed copy)\n" +
+      errors.map((e) => `  tried ${e}`).join("\n"),
+  );
 }
 
 // --------------------------------------------------------------------------
@@ -202,9 +223,7 @@ function serveBundle(bundleDir, replayPath) {
     if (pathname === "/") pathname = "/index.html";
     // The replay is mounted by name at the root whether or not it lives inside
     // the bundle, so the ?replay= URL is the same in both cases.
-    const target = pathname === `/${replayName}`
-      ? replayPath
-      : resolve(join(root, pathname));
+    const target = pathname === `/${replayName}` ? replayPath : resolve(join(root, pathname));
     if (target !== replayPath && !(target === root || target.startsWith(root + sep))) {
       res.writeHead(403).end("forbidden");
       return;
@@ -326,7 +345,7 @@ async function main() {
   try {
     await page.goto(target, { waitUntil: "commit", timeout: Math.min(args.timeout * 1000, 60000) });
   } catch (error) {
-    navError = String(error && error.message || error);
+    navError = String((error && error.message) || error);
     record(`[navigation] ${navError}`);
   }
 
@@ -337,20 +356,36 @@ async function main() {
     try {
       readout = await page.evaluate(READOUT_SCRIPT);
     } catch {
-      readout = readout || null;   // mid-navigation; retry on the next tick
+      readout = readout || null; // mid-navigation; retry on the next tick
     }
     const bridgeError = bridge.find((e) => e.type === "error");
-    if (bridgeError) { failure = `bridge error: ${bridgeError.message || "(no message)"}`; break; }
-    if (readout && readout.error_attr) { failure = `data-replay-error: ${readout.error_attr}`; break; }
-    if (readout && readout.loaded_attr === "true") { loaded = true; break; }
-    if (bridge.some((e) => e.type === "ready")) { loaded = true; break; }
+    if (bridgeError) {
+      failure = `bridge error: ${bridgeError.message || "(no message)"}`;
+      break;
+    }
+    if (readout && readout.error_attr) {
+      failure = `data-replay-error: ${readout.error_attr}`;
+      break;
+    }
+    if (readout && readout.loaded_attr === "true") {
+      loaded = true;
+      break;
+    }
+    if (bridge.some((e) => e.type === "ready")) {
+      loaded = true;
+      break;
+    }
     await sleep(250);
   }
   const elapsedMs = Date.now() - started;
   if (!loaded && !failure) {
     failure = `timeout: no data-replay-loaded="true" and no coworld-replay "ready" within ${args.timeout}s`;
   }
-  try { readout = await page.evaluate(READOUT_SCRIPT); } catch { /* keep the last good readout */ }
+  try {
+    readout = await page.evaluate(READOUT_SCRIPT);
+  } catch {
+    /* keep the last good readout */
+  }
 
   // ------------------------------------------------------------------
   // Scrub readouts. A replay that renders one frame and never advances is
@@ -370,14 +405,65 @@ async function main() {
         const now = await page.evaluate(READOUT_SCRIPT);
         scrub.push({ at: `${Math.round(fraction * 100)}%`, clock: now.clock });
       } catch (error) {
-        scrub.push({ at: `${Math.round(fraction * 100)}%`, clock: null, error: String(error && error.message) });
+        scrub.push({
+          at: `${Math.round(fraction * 100)}%`,
+          clock: null,
+          error: String(error && error.message),
+        });
       }
+    }
+  }
+
+  // Check the visible verdict against the native replay, not inherited team
+  // slot names (red/blue/green/yellow are not Hive's shuffled colony aliases).
+  let verdict = null;
+  if (loaded && args.replay) {
+    try {
+      const replay = JSON.parse(readFileSync(args.replay, "utf8"));
+      const winner = replay.results.winner;
+      const expectedLabel =
+        winner == null ? "DRAW" : replay.names.aliases[winner].toUpperCase() + " WINS";
+      const colour = winner == null ? null : replay.names.colours[winner];
+      const expectedColour =
+        colour == null
+          ? null
+          : "rgb(" + [1, 3, 5].map((i) => parseInt(colour.slice(i, i + 2), 16)).join(", ") + ")";
+      await page.locator("#btn-end").click({ timeout: 5000 });
+      verdict = await page.evaluate(() => {
+        const chip = document.querySelector("#win-chip");
+        const cap = document.querySelector("#scrub-win");
+        return {
+          label: chip.textContent,
+          title: cap.title,
+          colour: getComputedStyle(chip).color,
+          capColour: getComputedStyle(cap).backgroundColor,
+          display: getComputedStyle(chip).display,
+          capDisplay: getComputedStyle(cap).display,
+        };
+      });
+      verdict.expectedLabel = expectedLabel;
+      verdict.expectedColour = expectedColour;
+      if (
+        verdict.label !== expectedLabel ||
+        verdict.title !== expectedLabel ||
+        verdict.display === "none" ||
+        verdict.capDisplay === "none" ||
+        (expectedColour &&
+          (verdict.colour !== expectedColour || verdict.capColour !== expectedColour))
+      ) {
+        throw new Error("native winner mismatch: " + JSON.stringify(verdict));
+      }
+    } catch (error) {
+      loaded = false;
+      failure = String((error && error.message) || error);
     }
   }
 
   const pngPath = join(args.outDir, "viewer-smoke.png");
   const jsonPath = join(args.outDir, "viewer-smoke.json");
-  try { await page.screenshot({ path: pngPath, fullPage: false }); } catch (error) {
+  try {
+    await page.screenshot({ path: pngPath, fullPage: false });
+  } catch (error) {
     record(`[screenshot] ${error && error.message}`);
   }
 
@@ -400,6 +486,7 @@ async function main() {
       bridge_error: bridge.filter((e) => e.type === "error").map((e) => e.message),
     },
     scrub,
+    verdict,
     failure: failure || null,
     console_tail: consoleLog.slice(-30),
     screenshot: pngPath,
@@ -413,9 +500,11 @@ async function main() {
     console.error(`VIEWER SMOKE FAILED: ${failure}`);
     console.error(`  url        : ${target}`);
     console.error(`  elapsed    : ${elapsedMs} ms`);
-    console.error(`  signals    : data-replay-loaded=${summary.signals.data_replay_loaded} ` +
-      `data-replay-error=${summary.signals.data_replay_error} ` +
-      `bridge=[${summary.signals.bridge.join(",") || "none"}]`);
+    console.error(
+      `  signals    : data-replay-loaded=${summary.signals.data_replay_loaded} ` +
+        `data-replay-error=${summary.signals.data_replay_error} ` +
+        `bridge=[${summary.signals.bridge.join(",") || "none"}]`,
+    );
     console.error(`  #clock     : ${JSON.stringify(summary.clock)}`);
     console.error(`  #scorebug  : ${JSON.stringify(summary.scorebug)}`);
     console.error(`  status     : ${JSON.stringify(summary.status)}`);
@@ -432,20 +521,24 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(JSON.stringify({
-    loaded: true,
-    ms: elapsedMs,
-    clock: summary.clock,
-    scorebug: summary.scorebug,
-    feed_lines: summary.feed_lines,
-  }));
+  console.log(
+    JSON.stringify({
+      loaded: true,
+      ms: elapsedMs,
+      clock: summary.clock,
+      scorebug: summary.scorebug,
+      feed_lines: summary.feed_lines,
+    }),
+  );
   if (scrub.length) {
-    console.log("scrub readouts: " + scrub.map((s) => `${s.at}=${JSON.stringify(s.clock)}`).join("  "));
+    console.log(
+      "scrub readouts: " + scrub.map((s) => `${s.at}=${JSON.stringify(s.clock)}`).join("  "),
+    );
   }
   console.log(`artifacts: ${pngPath} ${jsonPath}`);
 }
 
 main().catch((error) => {
-  console.error(`VIEWER SMOKE CRASHED: ${error && error.stack || error}`);
+  console.error(`VIEWER SMOKE CRASHED: ${(error && error.stack) || error}`);
   process.exit(1);
 });
