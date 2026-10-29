@@ -26,6 +26,11 @@ def main():
     parser.add_argument("--player", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--capture", action="store_true")
+    parser.add_argument(
+        "--operator-prompt",
+        default="native fixture only",
+        help="Frozen operator for all four local fixture seats",
+    )
     parser.add_argument("--expect-missing", action="store_true")
     parser.add_argument(
         "--mode",
@@ -73,6 +78,7 @@ def main():
         "tokens": [f"fixture-token-{i}" for i in range(4)],
     }
     (output / "config.json").write_text(json.dumps(config))
+    (output / "operators.json").write_text(json.dumps([args.operator_prompt] * 4))
 
     def save_calls():
         with lock:
@@ -96,8 +102,8 @@ def main():
                 assert request["model"] == "local-hive-sentinel"
                 view = json.loads(
                     request["messages"][0]["content"]
-                    .split("\n\n", 1)[1]
                     .split("\n\nYour previous reply")[0]
+                    .rsplit("\n\n", 1)[1]
                 )
                 turn = view["turn"]
                 retry = (
@@ -367,7 +373,7 @@ def main():
                 base
                 | {
                     "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot={slot}&token={config['tokens'][slot]}",
-                    "PLAYER_PROMPT": "native fixture only",
+                    "PLAYER_PROMPT": args.operator_prompt,
                 },
                 f"player-{slot}",
             )
