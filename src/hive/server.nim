@@ -607,6 +607,10 @@ proc playerUpgradeHandler(request: Request) {.gcsafe.} =
       return
     let websocket = request.upgradeToWebSocket()
     withLock stateLock:
+      # Another request can claim this seat while its upgrade is in flight.
+      if game.playerSockets.hasKey(slot):
+        websocket.close()
+        return
       game.playerSockets[slot] = websocket
       game.socketSlots[websocket] = slot
       game.roster.seats[slot].connected = true
@@ -667,6 +671,8 @@ proc websocketHandler(
               (if scriptedNode.getBool(): "marcher" else: "")
             else: scriptedNode.getStr()
           withLock stateLock:
+            if game.playerSockets.getOrDefault(slot) != websocket:
+              return
             game.roster.register(slot, scripted,
               payload{"policy"}.getStr(),
               external = not payload.hasKey("prompt"),
@@ -676,6 +682,8 @@ proc websocketHandler(
         elif payload{"type"}.getStr() == "decision" and
             message.data.len <= 8192:
           withLock stateLock:
+            if game.playerSockets.getOrDefault(slot) != websocket:
+              return
             if game.pendingExternalTurn == payload{"turn"}.getInt(-1) and
                 game.roster.seats[slot].connected:
               game.externalReplies[slot] = message.data
@@ -690,7 +698,7 @@ proc websocketHandler(
           game.socketSlots.del(websocket)
           if game.playerSockets.getOrDefault(slot) == websocket:
             game.playerSockets.del(slot)
-          game.roster.seats[slot].connected = false
+            game.roster.seats[slot].connected = false
         game.globalSockets.excl(websocket)
 
 proc buildRouter(replayMode: bool): Router =

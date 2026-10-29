@@ -88,3 +88,50 @@ Response headers are the actual native HTTP library's parsed map, not a
 lossless header-wire copy. Only safe request headers are retained. Fixture
 source/image/policy identities are local diagnostics; authenticated hosted
 receipt, policy and immutable image joins still require independent admission.
+
+## Native socket ownership regression
+
+Only the current socket for a slot may register control or submit a doctrine.
+The server rechecks vacancy under the assignment lock after an upgrade and
+closes a losing concurrent newcomer. A stale socket close cannot mark the
+successor disconnected. This preserves Hive’s existing native behavior:
+a registered game-hosted prompt continues after its socket disconnects.
+
+The maintained fixture has two short ownership components:
+
+```sh
+env -i PATH="$PATH" HOME="$HOME" python tools/ci/native_capture_system.py \
+  --game dist/hive-capture --player dist/hive-player \
+  --output dist/ownership-race --capture --ownership-case race --race-pairs 5
+env -i PATH="$PATH" HOME="$HOME" python tools/ci/native_capture_system.py \
+  --game dist/hive-capture --player dist/hive-player \
+  --output dist/ownership-persistence --capture --ownership-case persistence
+dist/hive-check dist/ownership-persistence/config.json \
+  dist/ownership-persistence/trajectory.jsonl \
+  dist/ownership-persistence/replay.json dist/ownership-persistence/operators.json
+```
+
+Use a fresh output directory for each invocation. These components drive the
+four real player WebSockets directly; `--player` retains the normal harness
+argument but no player subprocess is launched in these two modes. Both use
+960 ticks and four turns with explicit component clocks accepted by the
+production parser. They do not establish ordinary 4,800-tick hosted behavior.
+
+The source-bound old runtime reproduced two welcomes for one slot. In the
+repaired runtime, five paired attempts each admitted one welcomed owner; the
+surviving external seat received four requests after competitor closure. A
+separate complete room closed the native prompt socket after its first turn.
+Three later requests retained its frozen operator, including the final turn.
+Source-native reconstruction checked all private views, requests, installed
+doctrines, keyframes, ant frames and native scores for both repaired rooms.
+All HTTP IDs in these components are synthetic, with zero provider calls.
+
+The guards cover stale registration and decision writes under the mutation
+lock, but no test barrier separately schedules a frame parsed before owner
+replacement or an accepted old-owner close after replacement. Collision
+sampling does not prove those interleavings absent. Event failure counters
+remain outside the native checker’s independent reconstruction. The previous
+full ordinary Linux and genuine pilot proofs retain their original source
+identities; this source change requires a new exact-source image and hosted
+qualification before a normal release. No stronger teacher or learning claim
+follows from these ownership checks.

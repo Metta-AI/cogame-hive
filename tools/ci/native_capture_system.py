@@ -13,10 +13,11 @@ import threading
 import time
 import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import connect
 
 
@@ -47,7 +48,12 @@ def main():
         action="store_true",
         help="Valid native action with an invalid Unicode provider model diagnostic",
     )
+    parser.add_argument("--ownership-case", choices=["race", "persistence"])
+    parser.add_argument("--race-pairs", type=int, default=0)
     args = parser.parse_args()
+    assert 0 <= args.race_pairs <= 5
+    assert args.ownership_case == "race" or args.race_pairs == 0
+    assert args.ownership_case != "race" or args.race_pairs > 0
     allowed = {"PATH", "HOME", "TMPDIR", "LANG", "LC_CTYPE", "__CF_USER_TEXT_ENCODING"}
     assert not set(os.environ) - allowed, "Use env -i for the parent too"
     os.umask(0o077)
@@ -77,8 +83,23 @@ def main():
         "players": [{"name": f"fixture-{i}"} for i in range(4)],
         "tokens": [f"fixture-token-{i}" for i in range(4)],
     }
+    if args.ownership_case:
+        config.update(
+            episodeTicks=960,
+            turnBudgetSeconds=2,
+            wallClockBudgetSeconds=60,
+            playerConnectTimeoutSeconds=15,
+            episodeTimeoutSeconds=120,
+            bonanzaTicks=[],
+        )
     (output / "config.json").write_text(json.dumps(config))
-    (output / "operators.json").write_text(json.dumps([args.operator_prompt] * 4))
+    (output / "operators.json").write_text(
+        json.dumps(
+            [args.operator_prompt, "", "", ""]
+            if args.ownership_case
+            else [args.operator_prompt] * 4
+        )
+    )
 
     def save_calls():
         with lock:
@@ -96,6 +117,8 @@ def main():
             calls.append(row)
             save_calls()  # Original bytes survive every later assertion or send failure.
             try:
+                if args.ownership_case == "persistence":
+                    time.sleep(0.1)
                 request = json.loads(raw)
                 slot = int(self.headers["X-Coworld-Player-Slot"])
                 assert request["max_tokens"] == 900 and request["temperature"] == 0.4
@@ -298,7 +321,10 @@ def main():
             "COWORLD_GAME_NAME": "hive",
             "COWORLD_EPISODE_ID": "local-hive-native",
             "COWORLD_GAME_VERSION": "0.0.0",
-            "COWORLD_SOURCE_REVISION": "local-proof",
+            "COWORLD_SOURCE_REVISION": "workingtree-sha256:"
+            + hashlib.sha256(
+                b"".join(p.read_bytes() for p in sorted(Path("src").rglob("*.nim")))
+            ).hexdigest(),
             "COWORLD_GAME_IMAGE_DIGEST": "sha256:" + "0" * 64,
         }
         if args.capture or args.expect_missing:
@@ -364,19 +390,162 @@ def main():
                 (output / "external-ws.json").write_text(json.dumps(external_rows))
 
         external_thread = None
-        if args.mode == "boundary":
-            external_thread = threading.Thread(target=external, daemon=True)
-            external_thread.start()
-        for slot in range(1 if args.mode == "boundary" else 0, 4):
-            launch(
-                [str(args.player.resolve())],
-                base
-                | {
-                    "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot={slot}&token={config['tokens'][slot]}",
-                    "PLAYER_PROMPT": args.operator_prompt,
-                },
-                f"player-{slot}",
+        ownership_rows = []
+        if args.ownership_case:
+
+            def open_seat(seat):
+                return connect(
+                    f"ws://127.0.0.1:{port}/player?slot={seat}&token={config['tokens'][seat]}",
+                    open_timeout=2,
+                    close_timeout=1,
+                    legacy=True,
+                )
+
+            winner = None
+            race_rows: list[dict[str, Any]] = []
+            if args.ownership_case == "race":
+
+                def contender():
+                    try:
+                        ws = open_seat(0)
+                        try:
+                            welcome = json.loads(ws.recv(timeout=0.3))
+                            return ws, welcome.get("type") == "welcome"
+                        except (TimeoutError, ConnectionClosed):
+                            return ws, False
+                    except InvalidHandshake as error:
+                        cause, messages = error, []
+                        while cause is not None:
+                            messages.append(str(cause))
+                            cause = cause.__cause__
+                        assert any("409" in text for text in messages), messages
+                        return None, False
+
+                for pair in range(args.race_pairs):
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        both = list(pool.map(lambda _: contender(), range(2)))
+                    race_rows.append({"pair": pair, "welcomed": [w for _, w in both]})
+                    (output / "race.json").write_text(json.dumps(race_rows, indent=2))
+                    for ws, welcomed in both:
+                        if ws is not None:
+                            if (
+                                pair == args.race_pairs - 1
+                                and welcomed
+                                and winner is None
+                            ):
+                                winner = ws
+                            else:
+                                ws.close()
+                    time.sleep(0.03)
+            if winner is None:
+                winner = open_seat(0)
+
+            def ownership_player(seat):
+                ws = winner if seat == 0 else open_seat(seat)
+                register = {
+                    "type": "register",
+                    "scripted": "marcher",
+                    "policy": "ownership-scripted",
+                    "prompt": "",
+                }
+                if seat == 0:
+                    register = (
+                        {
+                            "type": "register",
+                            "scripted": None,
+                            "policy": "ownership-external",
+                        }
+                        if args.ownership_case == "race"
+                        else {
+                            "type": "register",
+                            "scripted": None,
+                            "policy": "ownership-persistent",
+                            "prompt": args.operator_prompt,
+                        }
+                    )
+
+                def send(value):
+                    ws.send(json.dumps(value))
+                    with lock:
+                        ownership_rows.append(
+                            {
+                                "seat": seat,
+                                "sent": value,
+                                "elapsed_s": time.monotonic() - begin,
+                            }
+                        )
+
+                with ws:
+                    send(register)
+                    while True:
+                        packet = json.loads(ws.recv(timeout=25))
+                        with lock:
+                            ownership_rows.append(
+                                {
+                                    "seat": seat,
+                                    "received": packet,
+                                    "elapsed_s": time.monotonic() - begin,
+                                }
+                            )
+                        if packet.get("type") == "welcome":
+                            send(register)
+                        if packet.get("done"):
+                            return
+                        if seat == 0 and packet.get("type") == "decision_request":
+                            send(
+                                {
+                                    "type": "decision",
+                                    "turn": packet["turn"],
+                                    "source": "external",
+                                    "action": {
+                                        "scouts": 40,
+                                        "note": "ownership-external",
+                                        "say": "",
+                                    },
+                                }
+                            )
+                        if (
+                            seat == 0
+                            and args.ownership_case == "persistence"
+                            and packet.get("type") == "turn"
+                        ):
+                            with lock:
+                                ownership_rows.append(
+                                    {
+                                        "seat": 0,
+                                        "close_started_s": time.monotonic() - begin,
+                                    }
+                                )
+                            ws.close()
+                            with lock:
+                                ownership_rows.append(
+                                    {
+                                        "seat": 0,
+                                        "close_completed_s": time.monotonic() - begin,
+                                    }
+                                )
+                            return
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(ownership_player, range(4)))
+            (output / "ownership-ws.json").write_text(
+                json.dumps(ownership_rows, indent=2)
             )
+        else:
+            external_thread = None
+            if args.mode == "boundary":
+                external_thread = threading.Thread(target=external, daemon=True)
+                external_thread.start()
+            for slot in range(1 if args.mode == "boundary" else 0, 4):
+                launch(
+                    [str(args.player.resolve())],
+                    base
+                    | {
+                        "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot={slot}&token={config['tokens'][slot]}",
+                        "PLAYER_PROMPT": args.operator_prompt,
+                    },
+                    f"player-{slot}",
+                )
         game.wait(timeout=max(1, 180 - (time.monotonic() - begin)))
         assert game.returncode == 0
         for child in children[1:]:
@@ -388,7 +557,52 @@ def main():
                 "error" in row for row in external_rows
             )
         raw = (output / "replay.json").read_bytes()
-        if args.mode == "unicode-red":
+        if args.ownership_case:
+            replay = json.loads(raw)
+            assert (
+                replay["tick_count"] == 960
+                and replay["results"]["reason"] == "complete"
+            )
+            assert len(replay["doctrines"]) == 16
+            if args.ownership_case == "race":
+                assert len(calls) == 0
+                requests = [
+                    row
+                    for row in ownership_rows
+                    if row.get("seat") == 0
+                    and row.get("received", {}).get("type") == "decision_request"
+                ]
+                assert len(requests) == 4, (
+                    "winner lost external control after competitor close"
+                )
+                assert all(sum(row["welcomed"]) <= 1 for row in race_rows), (
+                    "duplicate welcomed owners"
+                )
+            else:
+                assert len(calls) == 4 and all(row["slot"] == 0 for row in calls)
+                closed = next(
+                    row["close_completed_s"]
+                    for row in ownership_rows
+                    if "close_completed_s" in row
+                )
+                later = [row for row in calls if row["arrival_s"] > closed]
+                assert later and max(row["turn"] for row in later) == 3
+                assert all(
+                    args.operator_prompt
+                    in json.loads(base64.b64decode(row["request_b64"]))["messages"][0][
+                        "content"
+                    ]
+                    for row in later
+                )
+            result = {
+                "status": "PASS",
+                "ownership_case": args.ownership_case,
+                "component_ticks": 960,
+                "ordinary_complete": False,
+                "http_calls": len(calls),
+                "genuine_teachers": 0,
+            }
+        elif args.mode == "unicode-red":
             invalid = False
             try:
                 raw.decode("utf8")
@@ -479,6 +693,10 @@ def main():
             }
         (output / "result-card.json").write_text(json.dumps(result, indent=2) + "\n")
     finally:
+        if args.ownership_case:
+            (output / "ownership-ws.json").write_text(
+                json.dumps(ownership_rows, indent=2)
+            )
         done.set()
         server.shutdown()
         for child in children:
