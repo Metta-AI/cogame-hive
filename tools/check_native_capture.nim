@@ -2,8 +2,17 @@
 import std/[json, os, strutils, tables]
 import hive/[types, config, field, sim, rules, replay, broadcast, doctrine, llm, prompts, training_capture]
 
-if paramCount() != 3:
-  quit("usage: check_native_capture CONFIG TRAJECTORY REPLAY", 2)
+if paramCount() notin [3, 4]:
+  quit("usage: check_native_capture CONFIG TRAJECTORY REPLAY [OPERATORS_JSON]", 2)
+var operators: array[Colonies, string]
+for seat in 0 ..< Colonies: operators[seat] = "native fixture only"
+if paramCount() == 4:
+  let supplied = parseJson(readFile(paramStr(4)))
+  doAssert supplied.kind == JArray and supplied.len == Colonies,
+    "OPERATORS_JSON must contain one frozen operator string per seat"
+  for seat in 0 ..< Colonies:
+    doAssert supplied[seat].kind == JString, "operator must be a string"
+    operators[seat] = supplied[seat].getStr()
 let configText = readFile(paramStr(1))
 var cfg = defaultGameConfig()
 cfg.update(configText)
@@ -13,7 +22,7 @@ var rows = initTable[string, JsonNode]()
 for line in lines(paramStr(2)):
   let row = parseJson(line)
   if row{"event_type"}.getStr() == "decision": rows[row["decision_id"].getStr()] = row
-var checked, requests: int
+var checked, requests, parsedActions: int
 var match = newSim(cfg, ensureField(cfg.fieldPath), true)
 let provide = proc (state: Sim, turn: int): array[Colonies, ResolvedDoctrine] =
   for seat in 0 ..< Colonies:
@@ -42,7 +51,7 @@ let provide = proc (state: Sim, turn: int): array[Colonies, ResolvedDoctrine] =
       let request = attempt["request"]
       if request.kind == JObject:
         doAssert request["system"].getStr() == selection.systemPrompt()
-        let expected = userMessage(state, seat, "native fixture only")
+        let expected = userMessage(state, seat, operators[seat])
         let user = request["messages"][0]["content"].getStr()
         let hint = "\n\nYour previous reply was invalid. Respond with ONLY the " &
           "requested JSON object, beginning with '{' and containing the " &
@@ -50,6 +59,14 @@ let provide = proc (state: Sim, turn: int): array[Colonies, ResolvedDoctrine] =
           "lay_home, focus_weight and the keys recall, focus, note, say."
         doAssert user == expected or user == expected & hint, key & " actual prompt"
         inc requests
+      if attempt["origin"].getStr() == "model" and attempt["accepted"].getBool():
+        let colony = state.seatNest[seat]
+        let parsed = parseDoctrine(attempt["response"].getStr(),
+          state.doctrines[colony], state.hasDoctrine[colony]).toJson()
+        doAssert parsed == attempt["parsed_action"], key & " parsed model action"
+        if attempt["attempt_id"] == row["selected_attempt_id"]:
+          doAssert parsed == row["executed_action"], key & " selected model action"
+        inc parsedActions
     result[seat] = ResolvedDoctrine(doctrine: fromJson(installed),
       source: parseEnum[DoctrineSource](installed["source"].getStr()),
       latencyMs: installed["latency_ms"].getInt())
@@ -69,5 +86,6 @@ for seat in 0 ..< Colonies:
   doAssert match.scores()[seat] == original["results"]["scores"][seat].getFloat()
 doAssert match.reason == erComplete
 echo $(%*{"status": "PASS", "private_views": checked, "actual_requests": requests,
+  "native_parsed_model_actions": parsedActions,
   "all_keyframes_antframes_applied_doctrines_native_scores": true,
   "event_failure_counters": "not independently reconstructed", "authenticated_teachers": 0})
