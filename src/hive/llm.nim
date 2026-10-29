@@ -23,7 +23,7 @@
 import std/[json, os, strutils, times, unicode]
 import bitworld/runtime
 import curly
-import types, doctrine, baselines, broadcast, sim, prompts
+import types, doctrine, baselines, broadcast, sim, prompts, training_capture
 
 const
   AnthropicUrl = "https://api.anthropic.com/v1/messages"
@@ -56,6 +56,8 @@ type
     turnBudgetSeconds*: float
       ## The outer per-turn deadline; the server sets it from the game
       ## config's turnBudgetSeconds.
+    capture*: RuntimeCapture
+    captured*: array[Colonies, CapturedDecision]
     disabled*: bool
     sendBatch*: proc (batch: RequestBatch, timeoutSeconds: int): ResponseBatch
       {.gcsafe.}
@@ -368,6 +370,9 @@ proc decideAll*(
           "integer keys scouts, trail_gain, poach, spread, lay_food, " &
           "lay_home, focus_weight and the keys recall, focus, note, say.")
       let request = client.requestFor(selection.systemPrompt(), user, seat)
+      if client.capture != nil:
+        client.captured[seat].beginAttempt()
+        client.captured[seat].requested(request.body, request.headers)
       batch.post(request.url, request.headers, request.body, $seat)
     ## Every request in this batch went to this candidate; a 403 from any of
     ## them is one verdict on it.
@@ -377,10 +382,17 @@ proc decideAll*(
     let latency = int((epochTime() - started) * 1000.0)
     var stillOpen: seq[int]
     for position, seat in open:
+      if client.capture != nil:
+        if responses[position].error.len > 0:
+          client.captured[seat].transportFailed(responses[position].error, latency)
+        else:
+          client.captured[seat].received(responses[position].response, latency)
       try:
         let text = client.textOf(responses[position].response,
           responses[position].error, batch[position].url, batchModel)
+        if client.capture != nil: client.captured[seat].replyText(text)
         let parsed = parseDoctrine(text, previous[seat], hasPrevious[seat])
+        if client.capture != nil: client.captured[seat].parsedProposal(parsed.toJson())
         result[seat] = SeatOutcome(
           resolved: ResolvedDoctrine(doctrine: parsed, source: dsLlm,
             latencyMs: latency),
@@ -389,6 +401,7 @@ proc decideAll*(
           attempts: attempt + 1
         )
       except CatchableError as error:
+        if client.capture != nil: client.captured[seat].rejectedAttempt(error.msg)
         echo "hive llm: seat ", seat, " attempt ", attempt + 1, " failed: ",
           error.msg
         let cause = classify(error.msg)

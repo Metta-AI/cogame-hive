@@ -14,7 +14,7 @@
 
 import std/json
 import types, field, pheromones, ants, sources, state, events, labels,
-  doctrine
+  doctrine, text_safety
 
 type
   Snapshot* = object
@@ -239,6 +239,10 @@ proc beginTurn*(sim: Sim) =
 
 proc installDoctrines*(sim: Sim, resolved: array[Colonies, ResolvedDoctrine]) =
   ## Step 1. `resolved` is indexed by SEAT; colony state is indexed by NEST.
+  # Atomic preflight for typed callers too: no colony is mutated on invalid text.
+  for entry in resolved:
+    if not scalarUtf8(entry.doctrine.note) or not scalarUtf8(entry.doctrine.say):
+      raise newException(HiveError, "invalid Unicode scalar doctrine text")
   sim.beginTurn()
   for colony in 0 ..< Colonies:
     for index in 0 ..< BlockCount:

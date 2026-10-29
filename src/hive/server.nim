@@ -34,7 +34,7 @@ import bitworld/runtime
 import curly
 import mummy, mummy/routers
 import types, config, field, doctrine, baselines, roster, sim, rules,
-  broadcast, global, llm, replay, state, events, prompts
+  broadcast, global, llm, replay, state, events, prompts, training_capture
 
 const
   ShutdownGraceSeconds* = 20.0
@@ -230,6 +230,22 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       declarePlayerFailure(missing[0], "player never connected")
 
     let client = newLlmClient(turnBudgetSeconds = gameConfig.turnBudgetSeconds)
+    let capture = newRuntimeCapture(gameConfig, runtimeConfig.resultsUri, runtimeConfig.replayUri)
+    client.capture = capture
+    var pendingTurn = -1
+    proc flushCapture() =
+      if capture == nil or pendingTurn < 0: return
+      # Deferred publication reads the actual installed command log, never a proposal.
+      for record in game.match.doctrineLog:
+        if record{"turn"}.getInt(-1) != pendingTurn: continue
+        let seat = record{"seat"}.getInt(-1)
+        if seat notin 0 ..< Colonies: continue
+        var action = copy(record)
+        for key in ["turn", "seat", "source", "latency_ms"]: action.delete(key)
+        var event = copy(record)
+        capture.applied(client.captured[seat], seat, action, event,
+          record{"source"}.getStr(), nativeStateHash(game.match, seat))
+      pendingTurn = -1
     var memory: array[Colonies, BaselineMemory]
     var turnsLlm: array[Colonies, int]
     var fallbackTurns: array[Colonies, int]
@@ -246,6 +262,13 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         ResolvedDoctrine] {.closure.} =
       var scripted: array[Colonies, ScriptKind]
       var connected: array[Colonies, bool]
+      if capture != nil:
+        flushCapture()
+        for seat in 0 ..< Colonies:
+          client.captured[seat] = capture.beginDecision("turn-" & $turn & "-seat-" & $seat,
+            "hive-seat-" & $seat, buildView(match, seat), game.selection.selectionMetadata(),
+            nativeStateHash(match, seat))
+        pendingTurn = turn
       var external: array[Colonies, bool]
       var prompts: array[Colonies, string]
       withLock stateLock:
@@ -424,6 +447,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       echo "hive: host error: ", error.msg
       game.match.endMatch(erFault, euHostError)
 
+    if capture != nil: flushCapture()
     withLock stateLock:
       var names: seq[string]
       var kinds: seq[string]
@@ -473,6 +497,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
     try:
       writeArtifact(runtimeConfig.replayUri, replayBytes, "application/json",
         "COGAME_SAVE_REPLAY_METHOD")
+      if capture != nil: capture.finishCapture(results)
       writeArtifact(runtimeConfig.resultsUri, $results, "application/json",
         "COGAME_RESULTS_METHOD")
       let eventsUri = requireFileUri("COGAME_EVENTS_URI")
