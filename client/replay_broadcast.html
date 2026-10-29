@@ -1791,7 +1791,11 @@ body[data-embed] #board { top: 0; height: 100%; }
     if (results.winner === null || results.winner === undefined) {
       C.setVerdict({ draw: true, t: replay.tick_count });
     } else {
-      C.setVerdict({ winner: TEAMS[results.winner], t: replay.tick_count });
+      var winner = results.winner;
+      C.setVerdict({ winner: replay.names.aliases[winner], t: replay.tick_count });
+      ['win-chip', 'scrub-win'].forEach(function (id) {
+        $(id).style.setProperty('--tc', replay.names.colours[winner]);
+      });
     }
   }
 

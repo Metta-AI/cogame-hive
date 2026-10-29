@@ -7,7 +7,7 @@
 ## bytes render in a browser and fail a strict JSON parser.
 
 import std/[json, strutils, unicode]
-import types
+import types, text_safety
 
 const
   DefaultScouts* = 40
@@ -178,6 +178,10 @@ proc repairDoctrine*(
   ## fields fall back to the previous turn's value, or the turn-0 default.
   ## The result is always legal, so it is what gets installed AND recorded -
   ## the replay never depends on re-running the repair.
+  # Validate only strings consumed by the native doctrine, before rune cleaning.
+  for key in ["note", "say"]:
+    if node.hasKey(key) and node[key].kind == JString and not scalarUtf8(node[key].getStr()):
+      raise newException(HiveError, "invalid Unicode scalar text in " & key)
   let base = if hasPrevious: previous else: defaultDoctrine()
   result = base
   result.note = ""

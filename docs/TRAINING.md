@@ -49,3 +49,42 @@ include selection metadata and actual prompt hashes; existing stored rows
 without metadata remain readable. Held-out wording is rejected for training.
 Local private artifacts use owner-only permissions. See [selection and teacher
 exports](../TRAINING.md).
+
+## Native HTTP evidence
+
+Set `COGAME_SAVE_TRAJECTORY_URI` to a private file URI to record the central Nim client’s actual model requests, raw HTTP response bytes, response headers and call IDs, retries, private actor views and actual installed doctrine records. Leave it unset for the original no-capture path. Private destinations must differ from public replay/results destinations. Publication failures remain visible without changing public gameplay.
+
+Targets require the native-selected JSON object to satisfy strict grammar, scalar Unicode and exact supplied-field/type equality with the installed command. Supported fences and omitted native defaults remain eligible; repaired fields are rejected without rewriting the original response. Consumed note/say strings also receive an atomic native Unicode check before state writes, including typed callers. Request/response/header/view and episode limits produce explicit gaps. Batch elapsed time is retained separately; individual call latency remains unknown.
+
+Run the actual native HTTP/WebSocket fixture with `python tools/ci/native_capture_system.py --help`. Reconstruct recorded episodes with `tools/check_native_capture.nim CONFIG TRAJECTORY REPLAY` compiled against this repository. Fixture UUIDs are synthetic and confer no authenticated receipt or teacher admission. The older ordinary-player JSON action export is not original provider evidence.
+
+Hive has one authored meadow family. Seed, horizon, wording and seat aliases do not establish independent training/validation worlds. Hosted receipt admission, strategic quality, image qualification and learning remain separate gates.
+
+Reproduce with Nim 2.2.4 and the locked dependencies, using an existing Python
+environment with `websockets` installed (no provider credentials):
+
+```sh
+nim c -d:release --out:dist/hive-capture src/hive.nim
+nim c -d:release --out:dist/hive-player src/hive_player.nim
+env -i PATH="$PATH" HOME="$HOME" python tools/ci/native_capture_system.py \
+  --game dist/hive-capture --player dist/hive-player \
+  --output dist/native-proof --capture --mode mixed
+nim c -d:release --out:dist/hive-check tools/check_native_capture.nim
+dist/hive-check dist/native-proof/config.json \
+  dist/native-proof/trajectory.jsonl dist/native-proof/replay.json
+```
+
+The system harness also supports `--mode boundary` for a configured two-turn
+component: a real external WebSocket action with invalid consumed Unicode is
+retried, while central model seats exhaust malformed replies and use the native
+fallback. Add `--sink-failure` to verify a private write error preserves public
+results, or `--forensic-metadata` to retain invalid provider diagnostics as exact
+base64 while excluding that target. These components do not establish full
+ordinary-episode completion. The native checker independently reconstructs all
+private views, prompts, installed doctrines, keyframes, ant frames and native
+scores; event failure counters are not independently reconstructed.
+
+Response headers are the actual native HTTP library's parsed map, not a
+lossless header-wire copy. Only safe request headers are retained. Fixture
+source/image/policy identities are local diagnostics; authenticated hosted
+receipt, policy and immutable image joins still require independent admission.
