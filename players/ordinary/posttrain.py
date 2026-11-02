@@ -21,7 +21,8 @@ class TransformersGenerator:
         digest = hashlib.sha256()
         for path in sorted(path for path in base.rglob("*") if path.is_file()):
             digest.update(str(path.relative_to(base)).encode())
-            digest.update(hashlib.sha256(path.read_bytes()).digest())
+            with path.open("rb") as stream:
+                digest.update(hashlib.file_digest(stream, "sha256").digest())
         if manifest["revision"] != f"local-sha256:{digest.hexdigest()}":
             raise ValueError("base model differs from the training manifest")
         self.tokenizer = AutoTokenizer.from_pretrained(base)
