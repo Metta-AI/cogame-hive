@@ -42,7 +42,8 @@ proc fakeGood(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
     let opened = epochTime()
     sleep(20)
     let closed = epochTime()
-    records.add(BatchRecord(size: batch.len, opened: opened, closed: closed))
+    records.add(BatchRecord(size: batch.len, opened: opened, closed: closed,
+      bodies: bodiesOf(batch)))
     for index in 0 ..< batch.len:
       windows.add((opened: opened, closed: closed))
       result.add((response: Response(code: 200,
@@ -143,6 +144,59 @@ proc promptsAll(text: string): array[Colonies, string] =
 
 proc main() =
   let meadow = testField()
+
+  block seatModelsRetainParallelRequestsAndRetries:
+    var seats = initRoster(@["t0", "t1", "t2", "t3"])
+    seats.register(0, "", "chosen", prompt = "go", model = "openai/gpt-4.1")
+    seats.register(1, "", "default", prompt = "go")
+    seats.register(2, "", "other", prompt = "go", model = "anthropic/claude-sonnet-4.5")
+    seats.register(3, "", "default", prompt = "go")
+    for invalid in [repeat("x", 129), "bad model", "bad\nmodel", "model?route=x", "\u{1F41C}"]:
+      var rejected = false
+      try:
+        seats.register(0, "driftling", "changed", prompt = "changed", model = invalid)
+      except HiveError:
+        rejected = true
+      check(rejected, "invalid model IDs are rejected before replacing a registration")
+      checkEqual(seats.seats[0].model, "openai/gpt-4.1", "original model remains")
+      checkEqual(seats.seats[0].prompt, "go", "original prompt remains")
+      checkEqual(seats.seats[0].scripted, skNone, "original hosted source remains")
+    var models: array[Colonies, string]
+    for seat in 0 ..< Colonies: models[seat] = seats.seats[seat].model
+    let client = enabledClient()
+    client.sendBatch = fakeGood
+    var match = newSim(testConfig(4800, 42), meadow)
+    var memory: array[Colonies, BaselineMemory]
+    var scripted: array[Colonies, ScriptKind]
+    records.setLen(0)
+    let provide = proc (m: Sim, turn: int):
+        array[Colonies, ResolvedDoctrine] {.closure.} =
+      let outcomes = client.decideAll(m, promptsAll("go"), scripted, memory,
+        turn, PromptSelection(), models = models)
+      for seat in 0 ..< Colonies:
+        checkEqual(outcomes[seat].resolved.source, dsLlm, "selected model resolves normally")
+        result[seat] = outcomes[seat].resolved
+    match.runEpisode(provide)
+    checkEqual(match.tick, 4800, "model selection retains the ordinary horizon")
+    checkEqual(records.len, 20, "one parallel batch on every ordinary turn")
+    for record in records:
+      checkEqual(record.size, 4, "all four model seats remain batched")
+      for seat in 0 ..< Colonies:
+        let request = parseJson(record.bodies[seat])
+        checkEqual(request["model"].getStr(),
+          (if models[seat].len > 0: models[seat] else: client.model), "exact per-seat/default model")
+        checkEqual(request["max_tokens"].getInt(), 900, "output limit unchanged")
+        checkEqual(request["temperature"].getFloat(), 0.4, "temperature unchanged")
+    records.setLen(0)
+    client.sendBatch = fakeGarbage
+    discard client.decideAll(match, promptsAll("go"), scripted, memory,
+      20, PromptSelection(), models = models)
+    checkEqual(records.len, 2, "the existing single retry remains bounded")
+    for record in records:
+      for seat in 0 ..< Colonies:
+        checkEqual(parseJson(record.bodies[seat])["model"].getStr(),
+          (if models[seat].len > 0: models[seat] else: client.model), "retry retains the same seat's model")
+    report("optional per-seat models preserve ordinary batches, defaults, limits and retries")
 
   block oneParallelBatch:
     records.setLen(0)
