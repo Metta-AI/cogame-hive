@@ -35,6 +35,17 @@ doctrine. `PLAYER_SCRIPTED=marcher` and `PLAYER_SCRIPTED=driftling` select its
 two baselines. The game validates actions, advances the simulation, and writes
 the replay.
 
+The bundled player also accepts `PLAYER_PROMPT` for game-hosted inference.
+Set `PLAYER_MODEL` on that same player to select its exact hosted model ID,
+for example `openai/gpt-4.1`; an omitted value retains the game's current
+model. The choice applies only to that seat, including its retries. Native
+900-output-token, temperature, turn, wall-clock and inference-budget limits
+remain in force. Registered IDs are ASCII and at most128 characters; invalid
+values are rejected rather than truncated. Direct Bedrock transport retains
+its configured profile selection and reports an explicit fallback for a
+per-seat override. Model choice is recorded in private original requests,
+not public actor observations or replay labels.
+
 To field a prompt policy, build `Dockerfile.ordinary-player` and set
 `PLAYER_PROMPT` and `ANTHROPIC_API_KEY` on that player:
 

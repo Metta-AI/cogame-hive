@@ -170,7 +170,7 @@ proc userMessage*(match: Sim, seat: int, prompt: string): string =
 
 proc requestFor(
   client: LlmClient,
-  system, user: string, slot: int
+  system, user: string, slot: int, selectedModel = ""
 ): tuple[url: string, headers: HttpHeaders, body: string] =
   var body = %*{
     "max_tokens": client.maxOutputTokens,
@@ -188,11 +188,11 @@ proc requestFor(
       headers["authorization"] = "Bearer " & client.bedrockToken
     result.url = client.bedrockUrl()
   elif client.transport == ltSidecar:
-    body["model"] = %client.model
+    body["model"] = %(if selectedModel.len > 0: selectedModel else: client.model)
     headers["anthropic-version"] = AnthropicVersion
     result.url = client.sidecarEndpoint & "/v1/messages"
   else:
-    body["model"] = %client.model
+    body["model"] = %(if selectedModel.len > 0: selectedModel else: client.model)
     ## Haiku 4.5 rejects `output_config.effort` outright with a 400.
     headers["x-api-key"] = client.apiKey
     headers["anthropic-version"] = AnthropicVersion
@@ -298,7 +298,8 @@ proc decideAll*(
   memory: var array[Colonies, BaselineMemory],
   turn: int,
   selection: PromptSelection,
-  external: array[Colonies, bool] = [false, false, false, false]
+  external: array[Colonies, bool] = [false, false, false, false],
+  models: array[Colonies, string] = ["", "", "", ""]
 ): array[Colonies, SeatOutcome] =
   ## One doctrine per seat. NEVER raises and never blocks unboundedly: at
   ## most two bounded batches, then the scripted layer.
@@ -324,6 +325,11 @@ proc decideAll*(
         detail: "",
         attempts: 0
       )
+    elif models[seat].len > 0 and client.transport == ltBedrock:
+      result[seat] = SeatOutcome(
+        resolved: scriptedResolved(views[seat], skMarcher, turn, memory[seat], dsFallback),
+        cause: "provider_error", detail: "Per-seat model selection requires the sidecar or Anthropic transport",
+        attempts: 0)
     else:
       open.add(seat)
 
@@ -369,7 +375,7 @@ proc decideAll*(
           "requested JSON object, beginning with '{' and containing the " &
           "integer keys scouts, trail_gain, poach, spread, lay_food, " &
           "lay_home, focus_weight and the keys recall, focus, note, say.")
-      let request = client.requestFor(selection.systemPrompt(), user, seat)
+      let request = client.requestFor(selection.systemPrompt(), user, seat, models[seat])
       if client.capture != nil:
         client.captured[seat].beginAttempt()
         client.captured[seat].requested(request.body, request.headers)

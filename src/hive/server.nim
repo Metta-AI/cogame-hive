@@ -270,13 +270,14 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             nativeStateHash(match, seat))
         pendingTurn = turn
       var external: array[Colonies, bool]
-      var prompts: array[Colonies, string]
+      var prompts, models: array[Colonies, string]
       withLock stateLock:
         for seat in 0 ..< Colonies:
           scripted[seat] = game.roster.seats[seat].scripted
           connected[seat] = game.roster.seats[seat].connected
           external[seat] = game.roster.seats[seat].external
           prompts[seat] = game.roster.seats[seat].prompt
+          models[seat] = game.roster.seats[seat].model
 
       ## Budget guard: settle early rather than overrun. Once it engages the
       ## Player requests are skipped for all remaining turns.
@@ -333,7 +334,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             discard
 
         # External requests are already in flight while hosted seats resolve.
-        let hosted = client.decideAll(match, prompts, scripted, memory, turn, game.selection, external)
+        let hosted = client.decideAll(match, prompts, scripted, memory, turn, game.selection, external, models)
         for seat in 0 ..< Colonies:
           if not external[seat]:
             outcomes[seat] = hosted[seat]
@@ -676,7 +677,8 @@ proc websocketHandler(
             game.roster.register(slot, scripted,
               payload{"policy"}.getStr(),
               external = not payload.hasKey("prompt"),
-              prompt = payload{"prompt"}.getStr())
+              prompt = payload{"prompt"}.getStr(),
+              model = payload{"model"}.getStr())
             echo "hive: slot ", slot, " registered (",
               game.roster.seats[slot].policyKind(), ")"
         elif payload{"type"}.getStr() == "decision" and

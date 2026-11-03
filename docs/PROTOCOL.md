@@ -25,7 +25,14 @@ from its private view. A seat that never connects plays the game fallback.
 
 Released `hive.player.v1` players may instead register a `prompt` string
 (at most 4000 runes). The game resolves those doctrines through the hosted
-LLM sidecar, in parallel with ordinary players. A named script plus the v1
+LLM sidecar, in parallel with ordinary players. The optional `model` string
+selects that seat's model for both initial and retry requests; omission retains
+the game default. It must be at most128 ASCII characters from letters, digits,
+`-`, `_`, `.`, `/` and `:`. The bundled player's `PLAYER_MODEL` emits this field
+only alongside `PLAYER_PROMPT`. Existing output and time limits remain fixed.
+Model IDs never enter public observations or replay events. Direct Bedrock
+profile rotation remains global; a per-seat override on that transport produces
+an explicit provider-error fallback. A named script plus the v1
 `prompt` field runs directly in the game. Prompts never enter replays.
 Registrations without a `prompt` field select ordinary decisions;
 their strategy stays inside the player container.

@@ -24,6 +24,7 @@ type
     scripted*: ScriptKind
     external*: bool
     prompt*: string
+    model*: string
     policyLabel*: string
     registered*: bool
 
@@ -51,11 +52,19 @@ proc register*(
   slot: int,
   scripted, policy: string,
   external = false,
-  prompt = ""
+  prompt = "",
+  model = ""
 ) =
   if slot < 0 or slot >= Colonies:
     return
+  let selectedModel = model.strip()
+  if selectedModel.len > 128:
+    raise newException(HiveError, "register.model exceeds 128 ASCII characters")
+  for character in selectedModel:
+    if character notin {'a'..'z', 'A'..'Z', '0'..'9', '-', '_', '.', '/', ':'}:
+      raise newException(HiveError, "invalid register.model character")
   let kind = parseScriptKind(scripted)
+  roster.seats[slot].model = selectedModel
   roster.seats[slot].external = external
   let cleaned = prompt.strip()
   roster.seats[slot].prompt =

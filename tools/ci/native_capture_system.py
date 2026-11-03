@@ -28,6 +28,10 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--capture", action="store_true")
     parser.add_argument(
+        "--player-model",
+        help="Override only bundled seat0; prove other seats retain the game default",
+    )
+    parser.add_argument(
         "--operator-prompt",
         default="native fixture only",
         help="Frozen operator for all four local fixture seats",
@@ -122,7 +126,11 @@ def main():
                 request = json.loads(raw)
                 slot = int(self.headers["X-Coworld-Player-Slot"])
                 assert request["max_tokens"] == 900 and request["temperature"] == 0.4
-                assert request["model"] == "local-hive-sentinel"
+                assert request["model"] == (
+                    args.player_model
+                    if args.player_model and slot == 0
+                    else "local-hive-sentinel"
+                )
                 view = json.loads(
                     request["messages"][0]["content"]
                     .split("\n\nYour previous reply")[0]
@@ -188,7 +196,7 @@ def main():
                         "id": "local-only",
                         "model": "\udc00"
                         if args.forensic_metadata and slot == 1 and turn == 1
-                        else "local-hive-sentinel",
+                        else request["model"],
                         "stop_reason": "end_turn",
                         "content": [{"type": "text", "text": text}],
                         "usage": {"input_tokens": 0, "output_tokens": 0},
@@ -543,6 +551,11 @@ def main():
                     | {
                         "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot={slot}&token={config['tokens'][slot]}",
                         "PLAYER_PROMPT": args.operator_prompt,
+                        **(
+                            {"PLAYER_MODEL": args.player_model}
+                            if args.player_model and slot == 0
+                            else {}
+                        ),
                     },
                     f"player-{slot}",
                 )

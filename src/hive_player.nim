@@ -30,6 +30,7 @@ when isMainModule:
 
   var scripted = getEnv("PLAYER_SCRIPTED").strip()
   let prompt = getEnv("PLAYER_PROMPT").strip()
+  let model = getEnv("PLAYER_MODEL").strip()
   if scripted.len == 0 and prompt.len == 0:
     scripted = DefaultScripted
     echo "hive player: using the ", DefaultScripted, " baseline"
@@ -47,6 +48,7 @@ when isMainModule:
     }
     if prompt.len > 0:
       frame["prompt"] = %prompt
+      if model.len > 0: frame["model"] = %model
     $frame
 
   ## A bounded connect retry: an unreachable game is reported and the
