@@ -42,7 +42,8 @@ proc fakeGood(batch: RequestBatch, timeoutSeconds: int): ResponseBatch
     let opened = epochTime()
     sleep(20)
     let closed = epochTime()
-    records.add(BatchRecord(size: batch.len, opened: opened, closed: closed))
+    records.add(BatchRecord(size: batch.len, opened: opened, closed: closed,
+      bodies: bodiesOf(batch)))
     for index in 0 ..< batch.len:
       windows.add((opened: opened, closed: closed))
       result.add((response: Response(code: 200,
