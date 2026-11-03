@@ -105,3 +105,20 @@ integer — no float arithmetic and no libm call appears in the sim, and a
 source-grep test enforces it. That is what lets the browser re-derive 220 KiB
 of pheromone field per frame from a 240 KB replay and prove it got the same
 match.
+
+## Authored field variants
+
+`default` and `sprint` keep the original `meadow` field. The opt-in
+`crossroads` variant uses a second authored field with corridor barriers,
+while retaining the default's 4,800 ticks, twenty-four ants per colony,
+food schedule, action schema and timing budgets. Both fields mirror every
+rock shape across both axes and preserve the same nest pads and bonanza
+cells. The existing field loader and replay's inlined geometry drive native
+execution and the Wasm viewer; no procedural generator or simulation rule
+is added. Original meadow golden digests remain unchanged.
+
+For research splits, group all seeds, seats and wording replicas from a
+field in the same physical family. Different seeds on `meadow` do not
+establish generalization to another topology. The second field enables an
+explicit topology holdout; its source/replay checks alone establish no
+model strength, authentic teacher labels or learning improvement.

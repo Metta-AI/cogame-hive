@@ -13,12 +13,19 @@ WORDINGS = TRAIN + ["heldout-briefing", "heldout-reference"]
 
 
 def play(binary, variant, wording, seed, language, prompt_seed=0, original=False):
+    manifest = ROOT / "coworld_manifest_template.json"
+    config = next(
+        v["game_config"]
+        for v in json.loads(manifest.read_text())["variants"]
+        if v["id"] == variant
+    )
+    field = ROOT / "data" / (config["fieldPath"] + ".fieldspec.json")
     process = subprocess.Popen(
         [
             str(binary),
             str(ROOT / "coworld_manifest_template.json"),
             variant,
-            str(ROOT / "data/meadow.fieldspec.json"),
+            str(field),
             *(["--language"] if language else []),
         ],
         stdin=subprocess.PIPE,
@@ -131,12 +138,21 @@ if __name__ == "__main__":
         )
         assert rejected.returncode != 0 and "held-out" in rejected.stderr
     count = 0
-    for variant in ("default", "sprint"):
+    for variant in (
+        v["id"]
+        for v in json.loads((ROOT / "coworld_manifest_template.json").read_text())[
+            "variants"
+        ]
+    ):
         for language in (False, True):
             for seed in ("wording-1",):
                 reference = play(binary, variant, "canonical", seed, language)
                 count += 1
-                if len(sys.argv) == 3 and not language:
+                if (
+                    len(sys.argv) == 3
+                    and not language
+                    and variant in ("default", "sprint")
+                ):
                     assert reference == play(
                         Path(sys.argv[2]).resolve(),
                         variant,
@@ -150,10 +166,12 @@ if __name__ == "__main__":
                     assert actual[:2] == reference[:2]
                     assert actual[2] != reference[2]
                     assert (
-                        next(iter(actual[2].values())).split("Reply with a single JSON", 1)[1]
-                        == next(iter(reference[2].values())).split("Reply with a single JSON", 1)[
-                            1
-                        ]
+                        next(iter(actual[2].values())).split(
+                            "Reply with a single JSON", 1
+                        )[1]
+                        == next(iter(reference[2].values())).split(
+                            "Reply with a single JSON", 1
+                        )[1]
                     )
                     count += 1
                 for prompt_seed in (4,):

@@ -5,8 +5,8 @@
 ## `pointInPolygon` with its STRICT-STRADDLE convention, and the process-global
 ## install. Paintbot's procedural generator, validators, `mapDiagnostics`,
 ## `map_pool.nim`, `mapgen_styles.nim` and the whole
-## mapSize/mapSymmetry/mapEndzone knob family are DROPPED: hive ships one
-## authored field, because four-way mirror fairness plus a hand-tuned rock
+## mapSize/mapSymmetry/mapEndzone knob family are DROPPED: hive uses
+## authored fields, because four-way mirror fairness plus a hand-tuned rock
 ## distribution is not something a seeded draw gives you.
 ##
 ## Only the shapes an author writes matter; the loader ORs in all four mirror
