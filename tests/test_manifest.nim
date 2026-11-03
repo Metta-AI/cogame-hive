@@ -11,7 +11,7 @@ proc main() =
   let game = manifest["game"]
 
   block seatCountEverywhere:
-    checkEqual(manifest["variants"].len, 2, "two variants")
+    checkEqual(manifest["variants"].len, 3, "three explicit variants")
     for variant in manifest["variants"]:
       check(variant["game_config"].hasKey("num_agents"),
         "variant " & variant["id"].getStr() & " declares num_agents")

@@ -641,6 +641,39 @@
         ],
         "fieldPath": "meadow"
       }
+    },
+    {
+      "id": "crossroads",
+      "name": "Crossroads",
+      "description": "The full 4800-tick game on an alternate authored, mirror-symmetric corridor field. Rules, colonies, food and timing match the default variant.",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "num_agents": 4,
+        "antsPerColony": 24,
+        "episodeTicks": 4800,
+        "turnTicks": 240,
+        "turnBudgetSeconds": 22,
+        "wallClockBudgetSeconds": 660,
+        "playerConnectTimeoutSeconds": 90,
+        "bonanzaTicks": [
+          1200,
+          3600
+        ],
+        "fieldPath": "crossroads"
+      }
     }
   ],
   "certification": {

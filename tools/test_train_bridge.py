@@ -1,4 +1,4 @@
-"""Play both certified Hive variants through the numeric bridge."""
+"""Play all published Hive variants through the numeric bridge."""
 
 import json
 import random
@@ -9,7 +9,12 @@ from pathlib import Path
 
 def play(binary: Path, variant: str, teacher: bool) -> None:
     manifest = Path(__file__).resolve().parent.parent / "coworld_manifest_template.json"
-    field = manifest.parent / "data" / "meadow.fieldspec.json"
+    config = next(
+        v["game_config"]
+        for v in json.loads(manifest.read_text())["variants"]
+        if v["id"] == variant
+    )
+    field = manifest.parent / "data" / (config["fieldPath"] + ".fieldspec.json")
     process = subprocess.Popen(
         [str(binary), str(manifest), variant, str(field)],
         stdin=subprocess.PIPE,
@@ -26,7 +31,9 @@ def play(binary: Path, variant: str, teacher: bool) -> None:
         return json.loads(process.stdout.readline())
 
     try:
-        observation = request({"kind": "reset", "seed": f"hive-{variant}-{teacher}", "players": 4})
+        observation = request(
+            {"kind": "reset", "seed": f"hive-{variant}-{teacher}", "players": 4}
+        )
         widths = set()
         batch_views = None
         decisions = 0
@@ -35,9 +42,17 @@ def play(binary: Path, variant: str, teacher: bool) -> None:
             widths.add(len(encoding["values"]))
             assert encoding["decision_id"] == observation["decision_id"]
             heads = encoding["action_heads"]
-            assert [len(head["choices"]) for head in heads] == [101] * 6 + [2, 20, 11, 101]
+            assert [len(head["choices"]) for head in heads] == [101] * 6 + [
+                2,
+                20,
+                11,
+                101,
+            ]
             for head in heads:
-                assert observation["action_schema"]["properties"][head["name"]]["enum"] == head["choices"]
+                assert (
+                    observation["action_schema"]["properties"][head["name"]]["enum"]
+                    == head["choices"]
+                )
             view = observation["semantic_view"]
             if observation["seat"] == 0:
                 batch_views = (view["turn"], view["tick"], view["scoreboard"])
@@ -51,7 +66,11 @@ def play(binary: Path, variant: str, teacher: bool) -> None:
                 action = {head["name"]: rng.choice(head["choices"]) for head in heads}
             assert all(action[head["name"]] in head["choices"] for head in heads)
             result = request(
-                {"kind": "step", "decision_id": observation["decision_id"], "response": json.dumps(action)}
+                {
+                    "kind": "step",
+                    "decision_id": observation["decision_id"],
+                    "response": json.dumps(action),
+                }
             )
             assert result["kind"] == "accepted" and result["action"] == action
             observation = result["observation"]
@@ -62,7 +81,13 @@ def play(binary: Path, variant: str, teacher: bool) -> None:
         assert all(0 <= score <= 1 for score in observation["scores"].values())
         assert abs(sum(observation["scores"].values()) - 1) < 1e-9
         assert len(widths) == 1
-        print(variant, "teacher" if teacher else "random", decisions, widths.pop(), "features")
+        print(
+            variant,
+            "teacher" if teacher else "random",
+            decisions,
+            widths.pop(),
+            "features",
+        )
     finally:
         process.stdin.close()
         process.stdout.close()
@@ -71,6 +96,14 @@ def play(binary: Path, variant: str, teacher: bool) -> None:
 
 if __name__ == "__main__":
     binary = Path(sys.argv[1]).resolve()
-    for variant in ("default", "sprint"):
+    for variant in (
+        v["id"]
+        for v in json.loads(
+            (
+                Path(__file__).resolve().parent.parent
+                / "coworld_manifest_template.json"
+            ).read_text()
+        )["variants"]
+    ):
         for teacher in (True, False):
             play(binary, variant, teacher)
