@@ -14,6 +14,7 @@ const
   LivePort = 18731
   ReplayPort = 18732
   NoShowPort = 18733
+  ArtifactBarrierPort = 18734
 
 proc waitForHealth(curl: Curly, port: int, seconds = 20.0): bool =
   let deadline = epochTime() + seconds
@@ -45,6 +46,7 @@ proc runLiveServer() =
   putEnv("COGAME_RESULTS_URI", "file://" & work / "results.json")
   putEnv("COGAME_SAVE_REPLAY_URI", "file://" & work / "replay.json")
   putEnv("COGAME_EVENTS_URI", "file://" & work / "events.jsonl")
+  putEnv("COGAME_METRICS_URI", "file://" & work / "metrics.json")
   var runtime = RuntimeConfig(host: "127.0.0.1", port: LivePort, config: "{}")
   runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
   runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
@@ -77,6 +79,26 @@ proc runNoShowServer() =
   putEnv("COGAME_PLAYER_FAILURE_URI", "file://" & work / "player_failure.json")
   putEnv("COGAME_EVENTS_URI", "file://" & work / "noshow-events.jsonl")
   var runtime = RuntimeConfig(host: "127.0.0.1", port: NoShowPort, config: "{}")
+  runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
+  runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
+  runGameServer(config, runtime)
+
+proc runArtifactBarrierServer() =
+  let work = getEnv("HIVE_TEST_WORK")
+  var config = defaultGameConfig()
+  config.seed = 42
+  config.episodeTicks = 480
+  config.playerConnectTimeoutSeconds = 1.0
+  config.wallClockBudgetSeconds = 40.0
+  config.bonanzaTicks = @[]
+  config.players = @[PlayerConfig(name: "P1"), PlayerConfig(name: "P2"),
+    PlayerConfig(name: "P3"), PlayerConfig(name: "P4")]
+  config.tokens = @["t0", "t1", "t2", "t3"]
+  putEnv("COGAME_RESULTS_URI", "file://" & work / "barrier-results.json")
+  putEnv("COGAME_SAVE_REPLAY_URI", "file://" & work / "barrier-replay.json")
+  putEnv("COGAME_EVENTS_URI", "file://" & work / "barrier-events.jsonl")
+  putEnv("COGAME_METRICS_URI", "file://" & work / "barrier-metrics.fifo")
+  var runtime = RuntimeConfig(host: "127.0.0.1", port: ArtifactBarrierPort, config: "{}")
   runtime.resultsUri = getEnv("COGAME_RESULTS_URI")
   runtime.replayUri = getEnv("COGAME_SAVE_REPLAY_URI")
   runGameServer(config, runtime)
@@ -211,6 +233,9 @@ proc main() =
     check(fileExists(work / "replay.json"), "the replay lands too")
     check(fileExists(work / "events.jsonl"),
       "COGAME_EVENTS_URI is honoured for a file:// URI")
+    check(fileExists(work / "metrics.json"), "metrics land before the results marker")
+    checkEqual(parseFile(work / "metrics.json")["final_tick"].getInt(), 480,
+      "complete metrics are readable at the results boundary")
 
     let stillUp = curl.get(base & "/healthz", emptyHttpHeaders(), 2)
     checkEqual(stillUp.code, 200,
@@ -293,6 +318,37 @@ proc main() =
     report("a no-show plays the marcher, is reported, the budget guard " &
       "engages, and the episode still completes")
 
+  block diagnosticsPrecedeTheCompletionMarker:
+    # A FIFO blocks the final metric write until the parent deliberately
+    # drains it. This deterministically exposes publishing results too early.
+    let fifo = work / "barrier-metrics.fifo"
+    checkEqual(execCmdEx("mkfifo " & quoteShell(fifo)).exitCode, 0, "create the owned diagnostic barrier")
+    let child = startProcess(self, options = {poParentStreams},
+      env = {"HIVE_TEST_SERVER": "artifact-barrier", "HIVE_TEST_WORK": work,
+             "PATH": getEnv("PATH")}.newStringTable)
+    proc guardedCheck(condition: bool, message: string) =
+      if not condition:
+        child.terminate()
+        discard child.waitForExit()
+      check(condition, message)
+    guardedCheck(waitForHealth(curl, ArtifactBarrierPort), "artifact barrier server answers health")
+    let deadline = epochTime() + 20.0
+    while epochTime() < deadline and not fileExists(work / "barrier-events.jsonl"):
+      sleep(50)
+    guardedCheck(fileExists(work / "barrier-replay.json"), "the replay precedes the diagnostic barrier")
+    guardedCheck(fileExists(work / "barrier-events.jsonl"), "events precede the blocked final metric")
+    sleep(100)
+    guardedCheck(not fileExists(work / "barrier-results.json"),
+      "no completion marker while the diagnostic write is blocked")
+    let metrics = parseJson(readFile(fifo))
+    guardedCheck(metrics["final_tick"].getInt() == 480, "the complete final metric survives the barrier")
+    while epochTime() < deadline and not fileExists(work / "barrier-results.json"):
+      sleep(50)
+    guardedCheck(fileExists(work / "barrier-results.json"), "results publish only after diagnostics finish")
+    child.terminate()
+    discard child.waitForExit()
+    report("a blocked diagnostic sink prevents an early results completion marker")
+
   ## ---- URI scheme rejection ----------------------------------------------
   block uriSchemes:
     for name in ["COGAME_EVENTS_URI", "COGAME_METRICS_URI"]:
@@ -314,6 +370,7 @@ when isMainModule:
   of "live": runLiveServer()
   of "replay": runReplayServer()
   of "noshow": runNoShowServer()
+  of "artifact-barrier": runArtifactBarrierServer()
   else:
     main()
     echo "test_server: all checks passed"

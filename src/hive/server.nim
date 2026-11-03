@@ -499,8 +499,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       writeArtifact(runtimeConfig.replayUri, replayBytes, "application/json",
         "COGAME_SAVE_REPLAY_METHOD")
       if capture != nil: capture.finishCapture(results)
-      writeArtifact(runtimeConfig.resultsUri, $results, "application/json",
-        "COGAME_RESULTS_METHOD")
       let eventsUri = requireFileUri("COGAME_EVENTS_URI")
       if eventsUri.len > 0:
         writeArtifact(eventsUri,
@@ -514,6 +512,10 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           "turns_llm": @turnsLlm,
           "fallback_turns": @fallbackTurns
         }, "application/json", "COGAME_METRICS_METHOD")
+      # Results is the worker's completion marker. Every diagnostic and the
+      # private capture must be durable before it can trigger pod teardown.
+      writeArtifact(runtimeConfig.resultsUri, $results, "application/json",
+        "COGAME_RESULTS_METHOD")
     except CatchableError as error:
       echo "hive: artifact write failed: ", error.msg
       quit(1)
