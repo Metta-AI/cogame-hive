@@ -40,7 +40,7 @@ def players(n: int) -> list[dict]:
 def main() -> None:
     service = compose_service()
     image = "{{" + service.upper() + "_IMAGE}}"
-    source_url = "https://github.com/Metta-AI/cogame-hive/tree/main"
+    source_url = "https://github.com/softmax-universe/cogame-hive/tree/main"
 
     # A real JSON Schema document, not a bare property bag: the CLI requires
     # `tokens` in `required`, a string-array `tokens` property with integer

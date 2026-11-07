@@ -1,4 +1,4 @@
-# CI for a Coworld game repo (Metta-AI/cogame-hive).
+# CI for a Coworld game repo (softmax-universe/cogame-hive).
 #
 # Goes to:  .github/workflows/ci.yml  in the coworld repo.
 # Substitute: hive  (lowercase game slug, e.g. bullwhip)
